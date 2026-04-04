@@ -1,1 +1,226 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local GS = game:GetService("GuiService")
 
+local lp = Players.LocalPlayer
+local mouse = lp:GetMouse()
+
+local config = {
+	enabled = false,
+	occluded = false,
+	fill = {color = Color3.fromRGB(255, 0, 0), trans = 0.5, rainbow = false},
+	outline = {color = Color3.fromRGB(255, 255, 255), trans = 0, rainbow = false},
+}
+
+local main_gui = Instance.new("ScreenGui")
+local cache_folder = Instance.new("Folder")
+
+main_gui.Name = "v15_final"; main_gui.Parent = CoreGui
+cache_folder.Name = "chams_v15"; cache_folder.Parent = CoreGui
+
+local function round(obj, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 6)
+	c.Parent = obj
+end
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "Main"
+MainFrame.Size = UDim2.new(0, 200, 0, 215)
+MainFrame.Position = UDim2.new(0.5, -100, 0.5, -105)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = main_gui
+round(MainFrame, 8)
+
+local dragToggle, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragToggle = true
+		dragStart = input.Position
+		startPos = MainFrame.Position
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement and dragToggle then
+		local delta = input.Position - dragStart
+		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+UIS.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end
+end)
+
+local ColorPane = Instance.new("Frame")
+ColorPane.Size = UDim2.new(0, 185, 0, 245)
+ColorPane.Position = UDim2.new(1, 10, 0, 0)
+ColorPane.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ColorPane.Visible = false
+ColorPane.Parent = MainFrame
+round(ColorPane, 8)
+Instance.new("UIStroke", ColorPane).Color = Color3.fromRGB(60, 60, 60)
+
+local SV_Canvas = Instance.new("Frame", ColorPane)
+SV_Canvas.Size = UDim2.new(0, 140, 0, 140)
+SV_Canvas.Position = UDim2.new(0, 10, 0, 10)
+SV_Canvas.ZIndex = 5
+round(SV_Canvas, 4)
+
+local sat_grad = Instance.new("Frame", SV_Canvas); sat_grad.Size = UDim2.new(1,0,1,0); sat_grad.BorderSizePixel = 0; sat_grad.ZIndex = 6; round(sat_grad, 4)
+local sg = Instance.new("UIGradient", sat_grad); sg.Transparency = NumberSequence.new(0, 1)
+
+local val_grad = Instance.new("Frame", SV_Canvas); val_grad.Size = UDim2.new(1,0,1,0); val_grad.BorderSizePixel = 0; val_grad.ZIndex = 7; round(val_grad, 4)
+local vg = Instance.new("UIGradient", val_grad); vg.Rotation = 90; vg.Color = ColorSequence.new(Color3.new(0,0,0)); vg.Transparency = NumberSequence.new(1, 0)
+
+local Hue_Rail = Instance.new("Frame", ColorPane)
+Hue_Rail.Size = UDim2.new(0, 15, 0, 140)
+Hue_Rail.Position = UDim2.new(0, 160, 0, 10)
+Hue_Rail.ZIndex = 10
+round(Hue_Rail, 4)
+
+local hg = Instance.new("UIGradient", Hue_Rail); hg.Rotation = 90
+hg.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 255)), 
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(0, 0, 255)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0, 255, 255)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 0)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(255, 255, 0)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+})
+
+local trans_lbl = Instance.new("TextLabel", ColorPane)
+trans_lbl.Size = UDim2.new(1, 0, 0, 20); trans_lbl.Position = UDim2.new(0, 10, 0, 155); trans_lbl.BackgroundTransparency = 1
+trans_lbl.Text = "TRANSPARENCY"; trans_lbl.TextColor3 = Color3.new(0.6, 0.6, 0.6); trans_lbl.Font = "Code"; trans_lbl.TextSize = 12; trans_lbl.TextXAlignment = "Left"
+
+local slider_back = Instance.new("Frame", ColorPane)
+slider_back.Size = UDim2.new(0, 165, 0, 12); slider_back.Position = UDim2.new(0, 10, 0, 175); slider_back.BackgroundColor3 = Color3.fromRGB(45, 45, 45); slider_back.ZIndex = 10; round(slider_back, 6)
+local slider_fill = Instance.new("Frame", slider_back); slider_fill.Size = UDim2.new(0.5, 0, 1, 0); slider_fill.BackgroundColor3 = Color3.new(0, 0.7, 1); slider_fill.BorderSizePixel = 0; round(slider_fill, 6)
+local slider_btn = Instance.new("Frame", slider_back); slider_btn.Size = UDim2.new(0, 4, 1, 4); slider_btn.Position = UDim2.new(0.5, -2, 0, -2); slider_btn.BackgroundColor3 = Color3.new(1,1,1); slider_btn.ZIndex = 11; round(slider_btn, 2)
+
+local RainbowToggle = Instance.new("TextButton", ColorPane)
+RainbowToggle.Size = UDim2.new(0, 165, 0, 25); RainbowToggle.Position = UDim2.new(0, 10, 0, 205); RainbowToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40); RainbowToggle.Text = "RAINBOW: OFF"; RainbowToggle.TextColor3 = Color3.new(1,1,1); RainbowToggle.Font = "Code"; RainbowToggle.TextSize = 12; round(RainbowToggle, 4)
+
+local Pointer = Instance.new("Frame", SV_Canvas)
+Pointer.Size = UDim2.new(0, 8, 0, 8); Pointer.AnchorPoint = Vector2.new(0.5, 0.5); Pointer.BackgroundColor3 = Color3.new(1,1,1); Pointer.ZIndex = 15; round(Pointer, 10); Instance.new("UIStroke", Pointer)
+
+local current_key = nil
+local function update_pkr()
+	if not current_key then return end
+	local h, s, v = config[current_key].color:ToHSV()
+	SV_Canvas.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+	Pointer.Position = UDim2.new(s, 0, 1 - v, 0)
+	
+	local p = 1 - config[current_key].trans
+	slider_fill.Size = UDim2.new(p, 0, 1, 0)
+	slider_btn.Position = UDim2.new(p, -2, 0, -2)
+	
+	RainbowToggle.Text = "RAINBOW: "..(config[current_key].rainbow and "ON" or "OFF")
+	RainbowToggle.TextColor3 = config[current_key].rainbow and Color3.new(0, 1, 0.5) or Color3.new(1,1,1)
+end
+
+RainbowToggle.MouseButton1Click:Connect(function()
+	if current_key then
+		config[current_key].rainbow = not config[current_key].rainbow
+		update_pkr()
+	end
+end)
+
+local function hook_input(f, cb)
+	f.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local loop; loop = RunService.RenderStepped:Connect(function()
+				local m = UIS:GetMouseLocation()
+				local gi = GS:GetGuiInset()
+				local rx = math.clamp((m.X - f.AbsolutePosition.X) / f.AbsoluteSize.X, 0, 1)
+				local ry = math.clamp((m.Y - gi.Y - f.AbsolutePosition.Y) / f.AbsoluteSize.Y, 0, 1)
+				cb(rx, ry)
+				update_pkr()
+				if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then loop:Disconnect() end
+			end)
+		end
+	end)
+end
+
+hook_input(SV_Canvas, function(x, y)
+	local h = config[current_key].color:ToHSV()
+	config[current_key].color = Color3.fromHSV(h, x, 1 - y)
+end)
+
+hook_input(Hue_Rail, function(x, y)
+	local _, s, v = config[current_key].color:ToHSV()
+	config[current_key].color = Color3.fromHSV(0.85 - (y * 0.85), s, v)
+end)
+
+hook_input(slider_back, function(x, y)
+	config[current_key].trans = 1 - x
+end)
+
+local ListHolder = Instance.new("Frame", MainFrame)
+ListHolder.Size = UDim2.new(1, 0, 1, 0); ListHolder.BackgroundTransparency = 1
+local Layout = Instance.new("UIListLayout", ListHolder); Layout.Padding = UDim.new(0, 5); Layout.HorizontalAlignment = "Center"
+
+local function make_toggle(txt, val)
+	local btn = Instance.new("TextButton", ListHolder)
+	btn.Size = UDim2.new(1, -20, 0, 30); btn.BackgroundColor3 = Color3.fromRGB(35,35,35); btn.Text = txt..": OFF"; btn.TextColor3 = Color3.new(1,1,1); btn.Font = "Code"; round(btn, 6)
+	btn.MouseButton1Click:Connect(function()
+		config[val] = not config[val]
+		btn.Text = txt..": "..(config[val] and "ON" or "OFF")
+		btn.TextColor3 = config[val] and Color3.new(0,1,0.5) or Color3.new(1,1,1)
+	end)
+end
+
+local function make_color(txt, k)
+	local f = Instance.new("Frame", ListHolder); f.Size = UDim2.new(1, -20, 0, 30); f.BackgroundTransparency = 1
+	local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1,0,1,0); l.Text = "  "..txt; l.TextColor3 = Color3.new(0.8,0.8,0.8); l.Font = "Code"; l.TextXAlignment = "Left"; l.BackgroundTransparency = 1
+	local b = Instance.new("TextButton", f); b.Size = UDim2.new(0, 20, 0, 20); b.Position = UDim2.new(1, -25, 0.5, -10); b.Text = ""; b.BackgroundColor3 = config[k].color; round(b, 4)
+	b.MouseButton1Click:Connect(function()
+		if current_key == k then ColorPane.Visible = false; current_key = nil else
+			current_key = k; ColorPane.Visible = true; update_pkr()
+		end
+	end)
+	RunService.RenderStepped:Connect(function() b.BackgroundColor3 = config[k].color end)
+end
+
+make_toggle("Enabled", "enabled")
+make_toggle("Occluded", "occluded")
+make_color("Fill", "fill")
+make_color("Outline", "outline")
+
+local Exit = Instance.new("TextButton", ListHolder)
+Exit.Size = UDim2.new(1, -20, 0, 30); Exit.BackgroundColor3 = Color3.fromRGB(60, 20, 20); Exit.Text = "UNLOAD"; Exit.TextColor3 = Color3.new(1, 1, 1); Exit.Font = "Code"; round(Exit, 6)
+Exit.MouseButton1Click:Connect(function()
+	config.enabled = false
+	task.wait(0.1)
+	cache_folder:Destroy()
+	main_gui:Destroy()
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not config.enabled then 
+		cache_folder:ClearAllChildren() 
+		return 
+	end
+	
+	local rainbow_col = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= lp and plr.Character then
+			local high = cache_folder:FindFirstChild(plr.Name)
+			if not high then
+				high = Instance.new("Highlight", cache_folder)
+				high.Name = plr.Name
+			end
+			high.Adornee = plr.Character
+			high.FillColor = config.fill.rainbow and rainbow_col or config.fill.color
+			high.OutlineColor = config.outline.rainbow and rainbow_col or config.outline.color
+			high.FillTransparency = config.fill.trans
+			high.OutlineTransparency = config.outline.trans
+			high.DepthMode = config.occluded and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
+		end
+	end
+end)
