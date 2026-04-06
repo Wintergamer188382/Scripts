@@ -1,0 +1,348 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local lp = Players.LocalPlayer
+local mouse = lp:GetMouse()
+local camera = workspace.CurrentCamera
+
+local active = false
+local size = 150
+local smooth = 0
+local part = "Head"
+local rig = "R15"
+local key = Enum.UserInputType.MouseButton2
+
+local f_clr = Color3.fromRGB(255, 255, 255)
+local f_trans = 0.8
+local f_on = false
+local o_clr = Color3.fromRGB(255, 255, 255)
+local o_trans = 0
+local o_on = false
+
+local n_on = false
+local h_on = false
+local d_on = false
+
+local c_on = false
+local c_dot = false
+local c_spokes = 4
+local c_len = 10
+local c_gap = 5
+local c_wid = 2
+local c_spin = 0
+local c_fol = false
+local c_clr = Color3.fromRGB(255, 255, 255)
+local c_trans = 0
+
+local ch_on = false
+local ch_occ = false
+local ch_f_clr = Color3.fromRGB(255, 0, 0)
+local ch_f_trans = 0.5
+local ch_o_clr = Color3.fromRGB(255, 255, 255)
+local ch_o_trans = 0
+
+local e_on = false
+local e_box = false
+local e_health = false
+local e_clr = Color3.fromRGB(255, 255, 255)
+
+local menu_up = true
+local step = 0
+local pick_fn = nil
+local h, s, v = 0, 1, 1
+local dragging = false
+
+local chams = Instance.new("Folder", CoreGui)
+local circ = Drawing.new("Circle"); circ.Thickness = 1; circ.NumSides = 64; circ.Visible = false
+local fill = Drawing.new("Circle"); fill.Thickness = 0; fill.NumSides = 64; fill.Filled = true; fill.Visible = false
+local text = Drawing.new("Text"); text.Size = 18; text.Center = true; text.Outline = true; text.Visible = false; text.Font = 2; text.Color = Color3.new(1,1,1)
+local dot = Drawing.new("Circle"); dot.Filled = true; dot.Visible = false; dot.ZIndex = 105
+local c_lines = {}
+local esp = {}
+
+local function kill_lines() 
+	for _, v in pairs(c_lines) do v:Remove() end 
+	table.clear(c_lines) 
+end
+
+local function round(o, r) 
+	local c = Instance.new("UICorner", o)
+	c.CornerRadius = UDim.new(0, r or 6) 
+end
+
+local gui = Instance.new("ScreenGui", CoreGui)
+local pgui = Instance.new("ScreenGui", CoreGui)
+local main = Instance.new("Frame", gui); main.Size = UDim2.new(0.85, 0, 0.8, 0); main.Position = UDim2.new(0.075, 0, 0.1, 0); main.BackgroundTransparency = 1
+local bg = Instance.new("Frame", main); bg.Size = UDim2.new(1, 0, 1, 0); bg.BackgroundColor3 = Color3.fromRGB(15, 15, 15); round(bg)
+
+local tabs = Instance.new("Frame", bg); tabs.Size = UDim2.new(1, 0, 0, 40); tabs.BackgroundTransparency = 1
+local b1 = Instance.new("TextButton", tabs); b1.Size = UDim2.new(0.5, 0, 1, 0); b1.Text = "COMBAT"; b1.BackgroundColor3 = Color3.fromRGB(25, 25, 25); b1.TextColor3 = Color3.new(1,1,1); b1.Font = "Code"
+local b2 = Instance.new("TextButton", tabs); b2.Size = UDim2.new(0.5, 0, 1, 0); b2.Position = UDim2.new(0.5, 0, 0, 0); b2.Text = "VISUALS"; b2.BackgroundColor3 = Color3.fromRGB(20, 20, 20); b2.TextColor3 = Color3.new(0.6, 0.6, 0.6); b2.Font = "Code"
+
+local p1 = Instance.new("Frame", bg); p1.Size = UDim2.new(1, 0, 1, -40); p1.Position = UDim2.new(0, 0, 0, 40); p1.BackgroundTransparency = 1
+local p2 = Instance.new("Frame", bg); p2.Size = UDim2.new(1, 0, 1, -40); p2.Position = UDim2.new(0, 0, 0, 40); p2.BackgroundTransparency = 1; p2.Visible = false
+
+b1.MouseButton1Click:Connect(function() 
+	p1.Visible = true; p2.Visible = false
+	b1.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	b2.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
+end)
+
+b2.MouseButton1Click:Connect(function() 
+	p1.Visible = false; p2.Visible = true
+	b2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	b1.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
+end)
+
+local function make_col(pos, p)
+	local f = Instance.new("Frame", p); f.Size = UDim2.new(0.33, -10, 1, -60); f.Position = pos; f.BackgroundTransparency = 1
+	local s = Instance.new("ScrollingFrame", f); s.Size = UDim2.new(1, 0, 1, 0); s.BackgroundTransparency = 1; s.BorderSizePixel = 0; s.ScrollBarThickness = 2
+	local c = Instance.new("Frame", s); c.Size = UDim2.new(1, 0, 0, 0); c.BackgroundTransparency = 1
+	local l = Instance.new("UIListLayout", c); l.Padding = UDim.new(0, 10); l.HorizontalAlignment = "Center"; l.SortOrder = Enum.SortOrder.LayoutOrder
+	l:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() s.CanvasSize = UDim2.new(0, 0, 0, l.AbsoluteContentSize.Y + 20) end)
+	return c
+end
+
+local c1 = make_col(UDim2.new(0, 10, 0, 10), p1)
+local c2 = make_col(UDim2.new(0.33, 5, 0, 10), p1)
+local c3 = make_col(UDim2.new(0.66, 0, 0, 10), p1)
+local vc1 = make_col(UDim2.new(0, 10, 0, 10), p2)
+
+local cp = Instance.new("Frame", pgui); cp.Size = UDim2.new(0, 240, 0, 220); cp.BackgroundColor3 = Color3.fromRGB(20, 20, 20); cp.Visible = false; round(cp)
+local h_b = Instance.new("Frame", cp); h_b.Size = UDim2.new(1, -30, 0, 22); h_b.Position = UDim2.new(0, 15, 0, 30); round(h_b, 6)
+local h_g = Instance.new("UIGradient", h_b); h_g.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(1,0,0)), ColorSequenceKeypoint.new(0.16, Color3.new(1,1,0)), ColorSequenceKeypoint.new(0.33, Color3.new(0,1,0)), ColorSequenceKeypoint.new(0.49, Color3.new(0,1,1)), ColorSequenceKeypoint.new(0.66, Color3.new(0,0,1)), ColorSequenceKeypoint.new(0.83, Color3.new(1,0,1)), ColorSequenceKeypoint.new(1, Color3.new(1,0,0))})
+local h_p = Instance.new("Frame", h_b); h_p.Size = UDim2.new(0, 14, 0, 14); h_p.Position = UDim2.new(0,0,0.5,0); h_p.AnchorPoint = Vector2.new(0.5, 0.5); h_p.BackgroundColor3 = Color3.new(1,1,1); round(h_p, 7)
+local v_b = Instance.new("Frame", cp); v_b.Size = UDim2.new(1, -30, 0, 22); v_b.Position = UDim2.new(0, 15, 0, 85); round(v_b, 6)
+local v_g = Instance.new("UIGradient", v_b)
+local v_p = Instance.new("Frame", v_b); v_p.Size = UDim2.new(0, 14, 0, 14); v_p.Position = UDim2.new(1,0,0.5,0); v_p.AnchorPoint = Vector2.new(0.5, 0.5); v_p.BackgroundColor3 = Color3.new(1,1,1); round(v_p, 7)
+local a_b = Instance.new("Frame", cp); a_b.Size = UDim2.new(1, -30, 0, 22); a_b.Position = UDim2.new(0, 15, 0, 140); round(a_b, 6); a_b.BackgroundColor3 = Color3.fromRGB(45,45,45)
+local a_f = Instance.new("Frame", a_b); a_f.Size = UDim2.new(1, 0, 1, 0); a_f.BackgroundColor3 = Color3.new(1,1,1); round(a_f, 6)
+
+local function update_cp()
+	local base = Color3.fromHSV(h, 1, 1)
+	v_g.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(0,0,0)), ColorSequenceKeypoint.new(0.5, base), ColorSequenceKeypoint.new(1, Color3.new(1,1,1))})
+	if pick_fn then
+		local s_val = v <= 0.5 and 1 or 1 - ((v - 0.5) * 2)
+		local v_val = v <= 0.5 and v * 2 or 1
+		pick_fn(Color3.fromHSV(h, s_val, v_val))
+	end
+end
+
+local function drag(o, fn)
+	o.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			local c; c = RunService.RenderStepped:Connect(function()
+				if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then c:Disconnect(); dragging = false; return end
+				local m = UserInputService:GetMouseLocation()
+				fn(math.clamp((m.X - o.AbsolutePosition.X) / o.AbsoluteSize.X, 0, 1))
+			end)
+		end
+	end)
+end
+
+drag(h_b, function(x) h = x; h_p.Position = UDim2.new(x, 0, 0.5, 0); update_cp() end)
+drag(v_b, function(x) v = x; v_p.Position = UDim2.new(x, 0, 0.5, 0); update_cp() end)
+drag(a_b, function(x) a_f.Size = UDim2.new(x, 0, 1, 0); update_cp() end)
+
+local idx = 0
+local function label(t, p)
+	idx = idx + 1
+	local l = Instance.new("TextLabel", p); l.Size = UDim2.new(1, -20, 0, 30); l.BackgroundTransparency = 1; l.Font = "Code"; l.Text = "--- " .. t:upper() .. " ---"; l.TextColor3 = Color3.fromRGB(255, 105, 180); l.TextSize = 14; l.LayoutOrder = idx
+end
+
+local function toggle(t, cur, p, fn)
+	idx = idx + 1
+	local s = cur
+	local b = Instance.new("TextButton", p); b.Size = UDim2.new(1, -20, 0, 35); b.BackgroundColor3 = Color3.fromRGB(22, 22, 22); b.Font = "Code"; b.TextColor3 = Color3.new(1,1,1); b.Text = t .. ": " .. (s and "ON" or "OFF"); b.LayoutOrder = idx; round(b)
+	b.MouseButton1Click:Connect(function()
+		s = not s
+		b.Text = t .. ": " .. (s and "ON" or "OFF")
+		b.TextColor3 = s and Color3.fromRGB(255, 105, 180) or Color3.new(1,1,1)
+		fn(s)
+	end)
+	if s then b.TextColor3 = Color3.fromRGB(255, 105, 180) end
+end
+
+local function slider(t, cur, min, max, p, fn)
+	idx = idx + 1
+	local f = Instance.new("Frame", p); f.Size = UDim2.new(1, -20, 0, 45); f.BackgroundTransparency = 1; f.LayoutOrder = idx
+	local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 15); l.Text = t .. ": " .. cur; l.TextColor3 = Color3.new(0.8,0.8,0.8); l.Font = "Code"; l.BackgroundTransparency = 1
+	local b = Instance.new("Frame", f); b.Size = UDim2.new(1, 0, 0, 8); b.Position = UDim2.new(0, 0, 0, 22); b.BackgroundColor3 = Color3.fromRGB(35,35,35); round(b)
+	local i = Instance.new("Frame", b); i.Size = UDim2.new((cur-min)/(max-min), 0, 1, 0); i.BackgroundColor3 = Color3.fromRGB(255, 105, 180); round(i)
+	b.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			local move; move = RunService.RenderStepped:Connect(function()
+				if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then move:Disconnect(); dragging = false; return end
+				local x = math.clamp((UserInputService:GetMouseLocation().X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
+				local val = math.floor(min + (x * (max - min)))
+				l.Text = t .. ": " .. val .. "/" .. max; i.Size = UDim2.new(x, 0, 1, 0)
+				fn(val)
+			end)
+		end
+	end)
+end
+
+local function color(t, cur, p, fn)
+	idx = idx + 1
+	local f = Instance.new("Frame", p); f.Size = UDim2.new(1, -20, 0, 35); f.BackgroundTransparency = 1; f.LayoutOrder = idx
+	local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 1, 0); l.Text = "  " .. t; l.TextColor3 = Color3.new(1,1,1); l.Font = "Code"; l.TextXAlignment = "Left"; l.BackgroundTransparency = 1
+	local b = Instance.new("TextButton", f); b.Size = UDim2.new(0, 40, 0, 20); b.Position = UDim2.new(1, -45, 0.5, -10); b.Text = ""; b.BackgroundColor3 = cur; round(b)
+	b.MouseButton1Click:Connect(function()
+		pick_fn = function(c) b.BackgroundColor3 = c; fn(c) end
+		local _h, _s, _v = b.BackgroundColor3:ToHSV()
+		h = _h; v = _s == 1 and _v / 2 or 0.5 + ((1-_s)/2)
+		h_p.Position = UDim2.new(h, 0, 0.5, 0)
+		v_p.Position = UDim2.new(v, 0, 0.5, 0)
+		cp.Position = UDim2.new(0, UserInputService:GetMouseLocation().X, 0, UserInputService:GetMouseLocation().Y)
+		cp.Visible = true
+	end)
+end
+
+label("Combat", c1)
+toggle("Aimbot Enabled", active, c1, function(v) active = v end)
+slider("Smoothing", smooth, 0, 25, c1, function(v) smooth = v end)
+label("Field of View", c1)
+slider("Radius", size, 10, 600, c1, function(v) size = v end)
+toggle("Outline", o_on, c1, function(v) o_on = v end)
+color("Outline Color", o_clr, c1, function(v) o_clr = v end)
+toggle("Fill", f_on, c1, function(v) f_on = v end)
+color("Fill Color", f_clr, c1, function(v) f_clr = v end)
+label("Visuals", c1)
+toggle("Show Name", n_on, c1, function(v) n_on = v end)
+toggle("Show Health", h_on, c1, function(v) h_on = v end)
+toggle("Show Distance", d_on, c1, function(v) d_on = v end)
+
+label("Crosshair", c2)
+toggle("Crosshair Enabled", c_on, c2, function(v) c_on = v end)
+toggle("Center Dot", c_dot, c2, function(v) c_dot = v end)
+slider("Spokes", c_spokes, 2, 12, c2, function(v) c_spokes = v end)
+slider("Length", c_len, 1, 50, c2, function(v) c_len = v end)
+slider("Gap", c_gap, 0, 30, c2, function(v) c_gap = v end)
+slider("Width", c_wid, 1, 10, c2, function(v) c_wid = v end)
+slider("Spin Speed", c_spin, 0, 10, c2, function(v) c_spin = v end)
+color("Crosshair Color", c_clr, c2, function(v) c_clr = v end)
+toggle("Follow Target", c_fol, c2, function(v) c_fol = v end)
+
+label("Target Selector", c3)
+local rb = Instance.new("TextButton", c3); rb.Size = UDim2.new(1, -20, 0, 35); rb.BackgroundColor3 = Color3.fromRGB(35, 35, 35); rb.Font = "Code"; rb.TextColor3 = Color3.new(1,1,1); rb.LayoutOrder = idx + 1; round(rb)
+local rm = Instance.new("Frame", c3); rm.Size = UDim2.new(1, 0, 0, 480); rm.BackgroundTransparency = 1; rm.LayoutOrder = 100
+local r_btns = {}
+
+local function p_btn(n, p, s)
+	local b = Instance.new("TextButton", rm); b.Size = s; b.Position = p; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.Text = ""; b.BorderSizePixel = 0; round(b, 4)
+	b.MouseButton1Click:Connect(function() part = n end)
+	RunService.RenderStepped:Connect(function() if not b.Parent then return end b.BackgroundColor3 = part == n and Color3.fromRGB(255, 105, 180) or Color3.fromRGB(30, 30, 30) end)
+	table.insert(r_btns, b)
+end
+
+local function load_rig()
+	for _, b in pairs(r_btns) do b:Destroy() end; table.clear(r_btns)
+	if rig == "R15" then
+		rb.Text = "MODEL: R15 (CLICK TO SWAP)"
+		p_btn("Head", UDim2.new(0.5, -30, 0, 10), UDim2.new(0, 60, 0, 60))
+		p_btn("UpperTorso", UDim2.new(0.5, -60, 0, 75), UDim2.new(0, 120, 0, 80))
+		p_btn("LowerTorso", UDim2.new(0.5, -60, 0, 160), UDim2.new(0, 120, 0, 40))
+		p_btn("LeftUpperArm", UDim2.new(0.5, -115, 0, 75), UDim2.new(0, 50, 0, 125))
+		p_btn("RightUpperArm", UDim2.new(0.5, 65, 0, 75), UDim2.new(0, 50, 0, 125))
+		p_btn("LeftUpperLeg", UDim2.new(0.5, -55, 0, 205), UDim2.new(0, 50, 0, 130))
+		p_btn("RightUpperLeg", UDim2.new(0.5, 5, 0, 205), UDim2.new(0, 50, 0, 130))
+	else
+		rb.Text = "MODEL: R6 (CLICK TO SWAP)"
+		p_btn("Head", UDim2.new(0.5, -35, 0, 10), UDim2.new(0, 70, 0, 70))
+		p_btn("Torso", UDim2.new(0.5, -65, 0, 85), UDim2.new(0, 130, 0, 150))
+		p_btn("Left Arm", UDim2.new(0.5, -135, 0, 85), UDim2.new(0, 65, 0, 150))
+		p_btn("Right Arm", UDim2.new(0.5, 70, 0, 85), UDim2.new(0, 65, 0, 150))
+		p_btn("Left Leg", UDim2.new(0.5, -65, 0, 240), UDim2.new(0, 60, 0, 150))
+		p_btn("Right Leg", UDim2.new(0.5, 5, 0, 240), UDim2.new(0, 60, 0, 150))
+	end
+end
+rb.MouseButton1Click:Connect(function() rig = (rig == "R15" and "R6" or "R15"); part = "Head"; load_rig() end); load_rig()
+
+label("Chams", vc1)
+toggle("Chams Enabled", ch_on, vc1, function(v) ch_on = v end)
+toggle("Occluded", ch_occ, vc1, function(v) ch_occ = v end)
+color("Fill Color", ch_f_clr, vc1, function(v) ch_f_clr = v end)
+color("Outline Color", ch_o_clr, vc1, function(v) ch_o_clr = v end)
+label("ESP", vc1)
+toggle("ESP Enabled", e_on, vc1, function(v) e_on = v end)
+toggle("Boxes", e_box, vc1, function(v) e_box = v end)
+toggle("Health Bar", e_health, vc1, function(v) e_health = v end)
+color("ESP Color", e_clr, vc1, function(v) e_clr = v end)
+
+local function make_esp(p)
+	local b = Drawing.new("Square"); b.Thickness = 1; b.Filled = false
+	local h_bg = Drawing.new("Line"); h_bg.Thickness = 2; h_bg.Color = Color3.new(0,0,0)
+	local h_br = Drawing.new("Line"); h_br.Thickness = 2
+	esp[p] = {Box = b, Health = h_br, HealthBack = h_bg}
+end
+
+RunService.RenderStepped:Connect(function()
+	if not menu_up then return end
+	local m_pos = UserInputService:GetMouseLocation()
+	local target, dist = nil, size
+
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= lp and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			if p.Character:FindFirstChild(part) and hum and hum.Health > 0 then
+				local s_pos, vis = camera:WorldToViewportPoint(p.Character[part].Position)
+				if vis then
+					local m = (Vector2.new(s_pos.X, s_pos.Y) - m_pos).Magnitude
+					if m < dist then dist = m; target = p.Character[part] end
+				end
+			end
+			local hl = chams:FindFirstChild(p.Name)
+			if ch_on then
+				if not hl then hl = Instance.new("Highlight", chams); hl.Name = p.Name end
+				hl.Adornee = p.Character; hl.FillColor = ch_f_clr; hl.FillTransparency = ch_f_trans; hl.OutlineColor = ch_o_clr; hl.OutlineTransparency = ch_o_trans; hl.DepthMode = ch_occ and 1 or 0
+			elseif hl then hl:Destroy() end
+			if not esp[p] then make_esp(p) end
+			local d = esp[p]
+			if hrp and hum and hum.Health > 0 and e_on then
+				local pos, vis = camera:WorldToViewportPoint(hrp.Position)
+				if vis then
+					local sy = (camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0)).Y - camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.8, 0)).Y)
+					local sx = sy / 1.8
+					d.Box.Visible = e_box; d.Box.Size = Vector2.new(sx, sy); d.Box.Position = Vector2.new(pos.X - sx/2, pos.Y - sy/2); d.Box.Color = e_clr
+					if e_health then
+						d.HealthBack.Visible = true; d.HealthBack.From = Vector2.new(pos.X-sx/2-4, pos.Y+sy/2); d.HealthBack.To = Vector2.new(pos.X-sx/2-4, pos.Y-sy/2)
+						d.Health.Visible = true; d.Health.From = Vector2.new(pos.X-sx/2-4, pos.Y+sy/2); d.Health.To = Vector2.new(pos.X-sx/2-4, (pos.Y+sy/2)-(sy*(hum.Health/hum.MaxHealth))); d.Health.Color = Color3.new(1,0,0):Lerp(Color3.new(0,1,0), hum.Health/hum.MaxHealth)
+					else d.Health.Visible = false; d.HealthBack.Visible = false end
+				else d.Box.Visible = false; d.Health.Visible = false; d.HealthBack.Visible = false end
+			else d.Box.Visible = false; d.Health.Visible = false; d.HealthBack.Visible = false end
+		end
+	end
+
+	circ.Position = m_pos; circ.Radius = size; circ.Visible = o_on; circ.Color = o_clr; circ.Transparency = 1-o_trans
+	fill.Position = m_pos; fill.Radius = size; fill.Visible = f_on; fill.Color = f_clr; fill.Transparency = 1-f_trans
+	if target and (n_on or h_on or d_on) then
+		local s = ""; if n_on then s = s..target.Parent.Name.."\n" end
+		if h_on then s = s.."HP: "..math.floor(target.Parent:FindFirstChildOfClass("Humanoid").Health).."\n" end
+		if d_on then s = s..math.floor((lp.Character.Head.Position - target.Position).Magnitude).."m" end
+		text.Visible = true; text.Text = s; text.Position = m_pos + Vector2.new(0, size + 10)
+	else text.Visible = false end
+
+	kill_lines()
+	if c_on then
+		local mid = m_pos; if c_fol and target then local p = camera:WorldToViewportPoint(target.Position); mid = Vector2.new(p.X, p.Y) end
+		dot.Visible = c_dot; dot.Position = mid; dot.Color = c_clr; dot.Radius = c_wid; dot.Transparency = 1-c_trans
+		step = step + ((c_spin^2)/400)
+		for i = 1, c_spokes do
+			local a = ((i-1)*(math.pi*2/c_spokes))+step; local d = Vector2.new(math.cos(a), math.sin(a))
+			local l = Drawing.new("Line"); l.Visible = true; l.From = mid+(d*c_gap); l.To = mid+(d*(c_gap+c_len)); l.Thickness = c_wid; l.Color = c_clr; l.Transparency = 1-c_trans; table.insert(c_lines, l)
+		end
+	else dot.Visible = false end
+
+	if UserInputService:IsMouseButtonPressed(key) and active and target then
+		camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(camera.CFrame.Position, target.Position), 1/(smooth+1))
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Enum.KeyCode.Delete then main.Visible = not main.Visible; if not main.Visible then cp.Visible = false end end end)
+local ex = Instance.new("TextButton", bg); ex.Size = UDim2.new(0, 120, 0, 35); ex.Position = UDim2.new(1, -130, 1, -45); ex.BackgroundColor3 = Color3.fromRGB(60, 20, 20); ex.Font = "Code"; ex.TextColor3 = Color3.new(1, 0.5, 0.5); ex.Text = "UNLOAD"; round(ex)
+ex.MouseButton1Click:Connect(function() menu_up = false; chams:Destroy(); gui:Destroy(); pgui:Destroy(); circ:Remove(); fill:Remove(); text:Remove(); dot:Remove(); kill_lines(); for _, d in pairs(esp) do d.Box:Remove(); d.Health:Remove(); d.HealthBack:Remove() end end)
