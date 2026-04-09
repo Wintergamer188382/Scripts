@@ -1,0 +1,1484 @@
+for k, v in pairs(getgc(true)) do
+    if pcall(function()
+        return rawget(v, "indexInstance")
+    end) and type(rawget(v, "indexInstance")) == "table" and (rawget(v, "indexInstance"))[1] == "kick" then
+        setreadonly(v, false)
+        v.tvk = {
+            "kick",
+            function()
+                return game.Workspace:WaitForChild("")
+            end
+        }
+    end
+end
+
+
+
+task.wait(0.5)
+local Players = game:GetService("Players")
+local LocalPlayer = Players.localPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Lighting = game:GetService("Lighting")
+
+local Config = {
+    Enabled = false,
+    Visible = true,
+    Flying = false,
+    FlySpeed = 50,
+    FOV = 100,
+    Chams = false,
+    CorpseESP = false,
+    RecoilMod = false,
+    FireRateMod = false,
+    InstantInteract = false,
+    MusicEnabled = false,
+    HideFoliage = false,
+    FullBright = false,
+    ExtractESP = false,
+    CustomCrosshair = false,
+    TracerEnabled = false,
+    ThirdPerson = false, 
+    HideUsername = false, 
+    AutoHeal = false,
+    FOVColor = Color3.fromRGB(0, 120, 255),
+    TracerColor = Color3.fromRGB(255, 20, 147),
+    TracerTime = 0.6, 
+    TracerTexture = "https://www.roblox.com/asset-thumbnail/image?assetId=76260924043402&width=420&height=420&format=png",
+    TracerType = "Lightning",
+    TargetPart = "Head",
+    HitSoundID = "121566025787365",
+    KillSoundID = "130437878091067",
+    GunSoundID = "",
+    EffectSoundID = "",
+    WebhookURL = "https://discord.com/api/webhooks/1485462996032684145/8gN8sy-hafA0tLb40sNvRf21PSRqQJcwdYf1tICO5fnyhwPfv2uzDdNKvyvHJ_rdcv4l",
+    SelectedConfigName = "EpsteinConfig",
+    MainUIColor = Color3.fromRGB(0, 120, 255),
+    RainbowFOV = false,
+    RainbowMain = false,
+    RainbowTracer = false,
+    FOVRSpeed = 5,
+    MainRSpeed = 5,
+    TracerRSpeed = 5,
+}
+
+--// TITAN OMNI-LOOTER DATABASE
+local LootSettingsData = {}
+local Database = {
+    ["Guns"] = {
+        ["A2000"] = "109203297696907", ["Beast"] = "91884692300525", ["CZ99"] = "119318068303966",
+        ["Dama"] = "133982196866640", ["Grom"] = "119185706294506", ["Komit"] = "86609862235642",
+        ["M19"] = "95828362751352", ["M21"] = "115276497299911", ["M24"] = "80784382968279",
+        ["M25"] = "128183480388053", ["M57"] = "79584778867393", ["M70AB2"] = "112507759146823",
+        ["M70B"] = "106723591409462", ["M70PS"] = "98606141518537", ["M808"] = "94922832361037",
+        ["M85"] = "105247436557646", ["M91"] = "138599804992934", ["M92"] = "127115800607062",
+        ["MP22"] = "94433928484136", ["PHP"] = "80282793216950", ["R44 Magnum"] = "126749307211500",
+        ["Sagi"] = "122324618427299", ["Satara"] = "123640152718211", ["Snake"] = "83065367161676",
+        ["Sokac"] = "97643946518784", ["Vepar"] = "116139571705318"
+    },
+    ["Clothing/Armor"] = {
+        ["Army Belt - Black"] = "73407024616969", ["Army Belt - Green"] = "109441368234125", ["Army Boots - Black"] = "139906466144411",
+        ["Balaclava - Black"] = "123504459201221", ["Balaclava - M10 Modern"] = "117802624537761", ["Chemical Protective Diversant Backpack"] = "84692954962159",
+        ["Chemical Protective Duffel Bag"] = "88162705693689", ["Gloves - Black"] = "83329591833938", ["Gloves - Green"] = "85023185106153",
+        ["Jacket - Black"] = "123418543548454", ["Jacket - White"] = "132633490834025", ["Jumpsuit - Black"] = "127324632452004",
+        ["Jumpsuit - Blue Amoeba 2"] = "136151264375841", ["Jumpsuit - M10 Modern Camo"] = "121506210458872", ["Jumpsuit - Oakleaf"] = "124360760048296",
+        ["Jumpsuit - Oakleaf 2"] = "98829077418147", ["Jumpsuit - Special"] = "100020397991243", ["Jumpsuit - Woodland"] = "94744236897614",
+        ["M2 Fonic Gas Mask"] = "119988896086638", ["M97 Chest Rig"] = "125427887137845", ["MD Plate Vest - Black"] = "108293187119104",
+        ["MD Plate Vest - Oakleaf"] = "123385875938962", ["MD Plate Vest - Woodland"] = "92878864015908", ["MD97 Helmet"] = "76919625623018",
+        ["MD97 Helmet - Black"] = "104584231102378", ["Oakleaf Backpack"] = "92818665990739", ["Oakleaf Chest Rig"] = "119811684316456",
+        ["Paratrooper Backpack"] = "85477082958622", ["Paratrooper Backpack - Black"] = "100022794154787", ["Riot Vest"] = "101184380457229",
+        ["Riot Vest - Black"] = "125744914212343", ["SAJ Chest Rig"] = "127265567799535", ["Sneakers - Black"] = "133540592209472",
+        ["Sneakers - Blue"] = "97777107229784", ["Sneakers - Red"] = "75712587839440", ["Sports Jacket - Green"] = "87426428406829",
+        ["Sports Jacket - Red"] = "123286347409277", ["Sweatpants - Black"] = "75836530747690", ["Sweatpants - Green"] = "89590540229374",
+        ["Sweatpants - Grey"] = "78357564487305", ["TIG Bicord"] = "128659284494810", ["Track Jacket - Red"] = "88309688040065",
+        ["Track Pants - Green"] = "120915883866985", ["Track Pants - Red"] = "113192505906628", ["Woodland Chest Rig"] = "106636881940837",
+        ["Woodland Diversant Backpack"] = "101467179361946", ["Woodland Duffel Bag"] = "108675362803082"
+    },
+    ["Attachments"] = {
+        ["8x Modern Scope"] = "124472211991107", ["AK Drum"] = "115957454321117", ["Flashlight 1"] = "79753865100599",
+        ["Folding Foregrip"] = "81135646474488", ["Foregrip Straight"] = "120886532070715", ["Metal Foregrip"] = "92882832468850",
+        ["ON-M76B 5.5x"] = "140733882681886", ["ON-M89 3.5x"] = "93530782021809", ["ON-M92 2.5x"] = "77366587342716",
+        ["Short Foregrip"] = "137963312302151", ["Silencer ModII"] = "88959954271540", ["Silencer ModIII"] = "140088595016015",
+        ["Silencer ModIV"] = "101667126248881", ["Silencer ModV"] = "91532904244491"
+    },
+    ["Medical"] = { ["Civilian Medkit"] = "72494668580891", ["Standard NBC Filter"] = "79963182845073" },
+    ["Ammo"] = { ["PistolAmmo"] = "109673398072548", ["RifleAmmo"] = "119752684848175", ["SMGAmmo"] = "117439938703546", ["ShotgunAmmo"] = "103512122240004" },
+    ["Keys"] = { ["Catacombs Entrance Key"] = "128036725692054" }
+}
+
+local LootToggles = {
+    ["Old Wartime Cache"] = false,
+    ["Wooden Crate"] = false,
+    ["Army Cache"] = false,
+    ["Wooden Crates"] = false,
+    ["Medical Supply"] = false,
+    ["Army Storage Bin"] = false,
+    ["Army Tech Bin"] = false,
+    ["Metal Box"] = false
+}
+
+local UIObjects = {
+    Toggles = {},
+    Inputs = {},
+    LootToggles = {},
+    ColorSliders = {},
+    ColorPickers = {},
+    Tabs = {}
+}
+
+if not isfolder("EpstienConfigs") then
+    makefolder("EpstienConfigs")
+end
+
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+ScreenGui.Name = "Titan_External"; ScreenGui.IgnoreGuiInset = true;
+ScreenGui.DisplayOrder = 2147483647; ScreenGui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 1200, 0, 750); Main.Position = UDim2.new(0.5, 0, 0.5, 0); Main.AnchorPoint = Vector2.new(0.5, 0.5);
+Main.BackgroundColor3 = Color3.fromRGB(10, 12, 18); Main.BorderSizePixel = 0
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 18)
+local MainStroke = Instance.new("UIStroke", Main); MainStroke.Color = Config.MainUIColor; MainStroke.Thickness = 3
+
+local Sidebar = Instance.new("Frame", Main)
+Sidebar.Size = UDim2.new(0, 300, 1, -45); Sidebar.Position = UDim2.new(0, 22.5, 0, 22.5); Sidebar.BackgroundTransparency = 1
+Instance.new("UIListLayout", Sidebar).Padding = UDim.new(0, 9)
+
+local MiniBox = Instance.new("TextButton", ScreenGui)
+MiniBox.Size = UDim2.new(0, 225, 0, 60); MiniBox.Position = UDim2.new(0, 20, 0.5, -30)
+MiniBox.BackgroundColor3 = Color3.fromRGB(10, 12, 18); MiniBox.BorderSizePixel = 0; MiniBox.Visible = false; MiniBox.AutoButtonColor = false; MiniBox.Text = ""
+Instance.new("UICorner", MiniBox).CornerRadius = UDim.new(0, 15)
+local MiniStroke = Instance.new("UIStroke", MiniBox); MiniStroke.Color = Config.MainUIColor
+
+local CrosshairContainer = Instance.new("Frame", ScreenGui)
+CrosshairContainer.Size = UDim2.new(0, 30, 0, 30); CrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); CrosshairContainer.BackgroundTransparency = 1; CrosshairContainer.Visible = false
+
+local FOVDisc = Instance.new("Frame", ScreenGui); FOVDisc.AnchorPoint = Vector2.new(0.5, 0.5); FOVDisc.BackgroundTransparency = 1; FOVDisc.ZIndex = 5
+local FOVStroke = Instance.new("UIStroke", FOVDisc); FOVStroke.Color = Config.FOVColor; Instance.new("UICorner", FOVDisc).CornerRadius = UDim.new(1, 0)
+
+local ActiveTab = nil
+
+local function UpdateMainUIColours()
+    MainStroke.Color = Config.MainUIColor
+    MiniStroke.Color = Config.MainUIColor
+    
+    for var, btn in pairs(UIObjects.Toggles) do
+        if Config[var] == true then
+            btn.BackgroundColor3 = Config.MainUIColor
+        end
+    end
+    
+    for _, line in pairs(CrosshairContainer:GetChildren()) do
+        line.BackgroundColor3 = Config.FOVColor
+    end
+
+    for tabBtn, data in pairs(UIObjects.Tabs) do
+        if ActiveTab == data.Page then
+            tabBtn.BackgroundColor3 = Config.MainUIColor
+            tabBtn.TextStrokeTransparency = 0
+            tabBtn.TextStrokeColor3 = Color3.new(0,0,0)
+        else
+            tabBtn.BackgroundColor3 = Color3.fromRGB(20, 25, 40)
+            tabBtn.TextStrokeTransparency = 1
+        end
+    end
+    
+    FOVStroke.Color = Config.FOVColor
+end
+
+local function UpdateUI()
+    for var, btn in pairs(UIObjects.Toggles) do
+        btn.Text = btn.Name .. ": " .. (Config[var] and "ON" or "OFF")
+        btn.BackgroundColor3 = Config[var] and Config.MainUIColor or Color3.fromRGB(30, 35, 55)
+    end
+    for var, input in pairs(UIObjects.Inputs) do
+        input.Text = tostring(Config[var])
+    end
+    for var, picker in pairs(UIObjects.ColorPickers) do
+        picker.UpdateFromConfig()
+    end
+    UpdateMainUIColours()
+end
+
+local function SaveConfig()
+    local data = {
+        Config = {},
+        LootToggles = LootToggles,
+        LootSettingsData = LootSettingsData
+    }
+    for k, v in pairs(Config) do
+        if typeof(v) == "Color3" then
+            data.Config[k] = {v.R, v.G, v.B}
+        else
+            data.Config[k] = v
+        end
+    end
+    writefile("EpstienConfigs/" .. Config.SelectedConfigName .. ".json", HttpService:JSONEncode(data))
+end
+
+local function LoadConfig(name)
+    local fileName = "EpstienConfigs/" .. name .. ".json"
+    if isfile(fileName) then
+        local raw = readfile(fileName)
+        local data = HttpService:JSONDecode(raw)
+        
+        if data.Config then
+            for k, v in pairs(data.Config) do
+                if type(v) == "table" and #v == 3 then
+                    Config[k] = Color3.new(v[1], v[2], v[3])
+                else
+                    Config[k] = v
+                end
+            end
+        end
+
+        if data.LootToggles then
+            for k, v in pairs(data.LootToggles) do
+                LootToggles[k] = v
+            end
+        end
+
+        if data.LootSettingsData then
+            LootSettingsData = data.LootSettingsData
+        end
+        
+        UpdateUI()
+    end
+end
+
+local LootSettings = {
+    ["Old Wartime Cache"] = {Color = Color3.fromRGB(255, 165, 0), Label = "Wartime Cache"},
+    ["Wooden Crate"]      = {Color = Color3.fromRGB(160, 82, 45), Label = "Crate"},
+    ["Army Cache"]        = {Color = Color3.fromRGB(255, 215, 0), Label = "⭐ Army Cache"},
+    ["Wooden Crates"]     = {Color = Color3.fromRGB(160, 82, 45), Label = "Crates"},
+    ["Medical Supply"]    = {Color = Color3.fromRGB(255, 50, 50), Label = "Medical"},
+    ["Army Storage Bin"]  = {Color = Color3.fromRGB(107, 142, 35), Label = "Storage Bin"},
+    ["Army Tech Bin"]     = {Color = Color3.fromRGB(0, 191, 255), Label = "Tech Bin"},
+    ["Metal Box"]         = {Color = Color3.fromRGB(170, 170, 175), Label = "Metal Box"}
+}
+
+local TracerIDs = {
+    ["Lightning"] = "76260924043402",
+    ["Lightning (Simple)"] = "72294367680518",
+    ["Star"] = "75056325012653",
+    ["Glow"] = "71799812889976"
+}
+
+local Running = true
+
+local function CreateGlowTracer(start, target)
+    if not Config.TracerEnabled then return end
+    local beamPart = Instance.new("Part", workspace)
+    beamPart.Anchored = true; beamPart.CanCollide = false; beamPart.Transparency = 1; beamPart.Size = Vector3.new(0.1, 0.1, 0.1)
+    
+    local att0 = Instance.new("Attachment", beamPart); att0.WorldPosition = start
+    local att1 = Instance.new("Attachment", beamPart); att1.WorldPosition = target
+    
+    local beam = Instance.new("Beam", beamPart)
+    beam.Attachment0 = att0; beam.Attachment1 = att1
+    
+    beam.Texture = Config.TracerTexture
+    beam.TextureMode = Enum.TextureMode.Wrap
+    beam.Width0, beam.Width1 = 2, 2
+    beam.Transparency = NumberSequence.new(0)
+    beam.Color = ColorSequence.new(Config.TracerColor)
+    
+    beam.LightEmission = 1 
+    beam.LightInfluence = 0 
+    beam.FaceCamera = true
+    beam.ZOffset = 2
+    
+    task.spawn(function()
+        local startTime = tick()
+        while tick() - startTime < Config.TracerTime and Running do
+            if Config.RainbowTracer then
+                local hue = tick() % Config.TracerRSpeed / Config.TracerRSpeed
+                beam.Color = ColorSequence.new(Color3.fromHSV(hue, 1, 1))
+            end
+            task.wait()
+        end
+    end)
+    
+    Debris:AddItem(beamPart, Config.TracerTime)
+end
+
+local function ApplyWeaponMods(obj)
+    if Config.RecoilMod then
+        if obj:GetAttribute("Recoil") then obj:SetAttribute("Recoil", 0) end
+        if obj:GetAttribute("Spread") then obj:SetAttribute("Spread", 0) end
+    end
+    if Config.FireRateMod then
+        if obj:GetAttribute("FireRate") then obj:SetAttribute("FireRate", 1400) end
+    end
+end
+LocalPlayer.DescendantAdded:Connect(ApplyWeaponMods)
+
+local function HandleInstantInteract(prompt)
+    if Config.InstantInteract and prompt:IsA("ProximityPrompt") then
+        prompt.HoldDuration = 0
+    end
+end
+workspace.DescendantAdded:Connect(HandleInstantInteract)
+
+local HitSFX = Instance.new("Sound", game:GetService("SoundService"))
+HitSFX.SoundId = "rbxassetid://" .. Config.HitSoundID; HitSFX.Volume = 2
+local KillSFX = Instance.new("Sound", game:GetService("SoundService"))
+KillSFX.SoundId = "rbxassetid://" .. Config.KillSoundID; KillSFX.Volume = 2
+local LoopSFX = Instance.new("Sound", game:GetService("SoundService"))
+LoopSFX.SoundId = "rbxassetid://1845924914"; LoopSFX.Volume = 1; LoopSFX.Looped = true
+if Config.MusicEnabled then LoopSFX:Play() end
+
+local function CleanupMap()
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            if v.Name:lower() == "window" or v.Name:lower():find("windowcurtain") then
+                v.Transparency = 1
+            end
+        end
+    end
+end
+CleanupMap()
+
+local MiniText = Instance.new("TextLabel", MiniBox)
+MiniText.Size = UDim2.new(1, 0, 1, 0); MiniText.BackgroundTransparency = 1; MiniText.Text = "open ui"; MiniText.Font = "Code"; MiniText.TextSize = 27
+Instance.new("UIStroke", MiniText).Thickness = 1.5
+
+task.spawn(function()
+    while true do
+        local hue = tick() % 5 / 5
+        MiniText.TextColor3 = Color3.fromHSV(hue, 1, 1)
+        task.wait()
+    end
+end)
+
+local function CreateLine(size, pos)
+    local l = Instance.new("Frame", CrosshairContainer)
+    l.Size = size; l.Position = pos; l.BackgroundColor3 = Config.FOVColor; l.BorderSizePixel = 0
+    return l
+end
+CreateLine(UDim2.new(0, 3, 0, 15), UDim2.new(0.5, -1.5, 0, -15))
+CreateLine(UDim2.new(0, 3, 0, 15), UDim2.new(0.5, -1.5, 0, 15))
+CreateLine(UDim2.new(0, 15, 0, 3), UDim2.new(0, -15, 0.5, -1.5))
+CreateLine(UDim2.new(0, 15, 0, 3), UDim2.new(0, 15, 0.5, -1.5))
+
+local RainbowLabel = Instance.new("TextLabel", ScreenGui)
+RainbowLabel.Size = UDim2.new(0, 600, 0, 75); RainbowLabel.Position = UDim2.new(0.5, -300, 0, 45); RainbowLabel.BackgroundTransparency = 1;
+RainbowLabel.Text = "test menu have fun! <3"; RainbowLabel.Font = "Code"; RainbowLabel.TextSize = 30; RainbowLabel.TextStrokeTransparency = 0.5
+Instance.new("UIStroke", RainbowLabel).Thickness = 1.5
+
+local Container = Instance.new("Frame", Main)
+Container.Size = UDim2.new(1, -367.5, 1, -45); Container.Position = UDim2.new(0, 345, 0, 22.5); Container.BackgroundTransparency = 1
+
+local function CreatePage()
+    local p = Instance.new("ScrollingFrame", Container); p.Size = UDim2.new(1, 0, 1, 0); p.BackgroundTransparency = 1; p.Visible = false;
+    p.ScrollBarThickness = 4.5; p.CanvasSize = UDim2.new(0,0,2.5,0); p.BorderSizePixel = 0
+    local list = Instance.new("UIListLayout", p)
+    list.Padding = UDim.new(0, 12)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    return p
+end
+
+local globalLayoutOrder = 0
+local function nextOrder()
+    globalLayoutOrder = globalLayoutOrder + 1
+    return globalLayoutOrder
+end
+
+local function AddSeparator(parent, text)
+    local sep = Instance.new("Frame", parent)
+    sep.Size = UDim2.new(1, -15, 0, 37.5)
+    sep.BackgroundTransparency = 1
+    sep.LayoutOrder = nextOrder()
+
+    local line = Instance.new("Frame", sep)
+    line.Size = UDim2.new(1, 0, 0, 1.5)
+    line.Position = UDim2.new(0, 0, 1, 0)
+    line.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+    line.BorderSizePixel = 0
+
+    local lbl = Instance.new("TextLabel", sep)
+    lbl.Size = UDim2.new(1, 0, 1, -3)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text:upper()
+    lbl.TextColor3 = Config.MainUIColor
+    lbl.Font = "Code"
+    lbl.TextSize = 19.5
+    lbl.TextXAlignment = "Left"
+    lbl.TextStrokeTransparency = 0
+    lbl.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UIStroke", lbl).Thickness = 1.2
+end
+
+local CombatP, MoveP, TeleportP, VisualP, LootP, MiscP, AutoLootP, ConfigP = CreatePage(), CreatePage(), CreatePage(), CreatePage(), CreatePage(), CreatePage(), Instance.new("Frame", Container), CreatePage()
+CombatP.Visible = true
+ActiveTab = CombatP
+
+AutoLootP.Size = UDim2.new(1, 0, 1, 0)
+AutoLootP.BackgroundTransparency = 1
+AutoLootP.Visible = false
+
+local function AddTab(text, page)
+    local b = Instance.new("TextButton", Sidebar); b.Size = UDim2.new(1, 0, 0, 60); b.BackgroundColor3 = Color3.fromRGB(20, 25, 40);
+    b.Text = text; b.TextColor3 = Color3.new(1, 1, 1); b.Font = "Code"; b.TextSize = 21
+    b.TextStrokeTransparency = 1
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+    Instance.new("UIStroke", b).Thickness = 1.5
+    
+    UIObjects.Tabs[b] = {Page = page}
+
+    b.MouseButton1Click:Connect(function()
+        CombatP.Visible, MoveP.Visible, TeleportP.Visible, VisualP.Visible, LootP.Visible, MiscP.Visible, AutoLootP.Visible, ConfigP.Visible = false, false, false, false, false, false, false, false
+        page.Visible = true
+        ActiveTab = page
+        UpdateMainUIColours()
+    end)
+    
+    if ActiveTab == page then b.BackgroundColor3 = Config.MainUIColor end
+end
+
+local function AddToggle(parent, text, var)
+    local b = Instance.new("TextButton", parent); b.Size = UDim2.new(1, -15, 0, 60); b.BackgroundColor3 = Config[var] and Config.MainUIColor or Color3.fromRGB(30, 35, 55);
+    b.Text = text .. ": " .. (Config[var] and "ON" or "OFF"); b.TextColor3 = Color3.new(1,1,1); b.Font = "Code"; b.TextSize = 19.5; b.Name = text
+    b.TextStrokeTransparency = 0
+    b.TextStrokeColor3 = Color3.new(0,0,0)
+    b.LayoutOrder = nextOrder()
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+    Instance.new("UIStroke", b).Thickness = 1.2
+    UIObjects.Toggles[var] = b
+    b.MouseButton1Click:Connect(function()
+        Config[var] = not Config[var]; b.Text = text .. ": " .. (Config[var] and "ON" or "OFF")
+        b.BackgroundColor3 = Config[var] and Config.MainUIColor or Color3.fromRGB(30, 35, 55)
+        
+        if var == "MusicEnabled" then 
+            if Config.MusicEnabled then LoopSFX:Play() else LoopSFX:Pause() end
+        elseif var == "HideFoliage" then
+            local fol = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Foliage")
+            if fol then for _, p in pairs(fol:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = Config.HideFoliage and 1 or 0 end end end
+            local grass = workspace:FindFirstChild("GrassInstances")
+            if grass then for _, p in pairs(grass:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = Config.HideFoliage and 1 or 0 end end end
+        elseif (var == "RecoilMod" or var == "FireRateMod") and Config[var] then
+            for _, o in pairs(LocalPlayer:GetDescendants()) do ApplyWeaponMods(o) end
+        elseif var == "InstantInteract" and Config.InstantInteract then
+            for _, v in pairs(workspace:GetDescendants()) do HandleInstantInteract(v) end
+        elseif var == "ThirdPerson" then
+            if not Config.ThirdPerson then
+                Camera.CameraType = Enum.CameraType.Custom
+            end
+        end
+    end)
+end
+
+local function AddLootToggle(parent, name, custom_var)
+    local target_var = custom_var or name
+    local source_table = custom_var and Config or LootToggles
+    
+    local b = Instance.new("TextButton", parent); b.Size = UDim2.new(1, -15, 0, 60); b.BackgroundColor3 = source_table[target_var] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55);
+    b.Text = name .. ": " .. (source_table[target_var] and "ON" or "OFF"); b.TextColor3 = Color3.new(1,1,1); b.Font = "Code"; b.TextSize = 19.5
+    b.TextStrokeTransparency = 0
+    b.TextStrokeColor3 = Color3.new(0,0,0)
+    b.LayoutOrder = nextOrder()
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+    Instance.new("UIStroke", b).Thickness = 1.2
+    if not custom_var then UIObjects.LootToggles[name] = b end
+    b.MouseButton1Click:Connect(function()
+        source_table[target_var] = not source_table[target_var]
+        b.Text = name .. ": " .. (source_table[target_var] and "ON" or "OFF")
+        b.BackgroundColor3 = source_table[target_var] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+    end)
+end
+
+local function AddInput(parent, label, var, isSound)
+    local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -15, 0, 60); f.BackgroundColor3 = Color3.fromRGB(20, 25, 35); f.ZIndex = 14
+    f.LayoutOrder = nextOrder()
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 9)
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(0.4, 0, 1, 0); l.Position = UDim2.new(0, 15, 0, 0); l.Text = label; l.TextColor3 = Color3.new(1, 1, 1);
+    l.Font = "Code"; l.BackgroundTransparency = 1; l.TextXAlignment = "Left"; l.TextSize = 19.5; l.ZIndex = 15
+    l.TextStrokeTransparency = 0
+    l.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UIStroke", l).Thickness = 1.2
+    local i = Instance.new("TextBox", f); i.Size = UDim2.new(0.5, 0, 0.7, 0); i.Position = UDim2.new(0.45, 0, 0.15, 0); i.Text = tostring(Config[var]);
+    i.BackgroundColor3 = Color3.fromRGB(10, 12, 20); i.TextColor3 = Config.MainUIColor; i.Font = "Code"; i.TextSize = 19.5; i.BorderSizePixel = 0; i.ZIndex = 15
+    Instance.new("UICorner", i).CornerRadius = UDim.new(0, 7.5)
+    UIObjects.Inputs[var] = i
+    i.FocusLost:Connect(function()
+        if var == "SelectedConfigName" then
+            Config[var] = i.Text
+        else
+            local rawText = i.Text:gsub("[^%d%.]", "")
+            Config[var] = tonumber(rawText) or Config[var]; i.Text = tostring(Config[var])
+            if isSound then
+                local formattedID = "rbxassetid://" .. rawText
+                if var == "HitSoundID" then HitSFX.SoundId = formattedID elseif var == "KillSoundID" then KillSFX.SoundId = formattedID end
+            end
+        end
+    end)
+end
+
+-- COLOR PICKER SYSTEM
+local ColorDragging = false
+local function AddColorPicker(parent, label, var, rainbowVar, speedVar)
+    local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -15, 0, 140); f.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+    f.LayoutOrder = nextOrder()
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 9)
+
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, -30, 0, 35); l.Position = UDim2.new(0, 15, 0, 5); l.Text = label; l.TextColor3 = Color3.new(1, 1, 1);
+    l.Font = "Code"; l.BackgroundTransparency = 1; l.TextXAlignment = "Left"; l.TextSize = 18
+    l.TextStrokeTransparency = 0
+    l.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UIStroke", l).Thickness = 1.2
+
+    local sliderFrame = Instance.new("Frame", f); sliderFrame.Size = UDim2.new(1, -100, 0, 15); sliderFrame.Position = UDim2.new(0, 15, 0, 50); sliderFrame.BorderSizePixel = 0
+    Instance.new("UICorner", sliderFrame).CornerRadius = UDim.new(1, 0)
+    local uig = Instance.new("UIGradient", sliderFrame)
+    local stops = {}
+    for i = 0, 1, 0.1 do table.insert(stops, ColorSequenceKeypoint.new(i, Color3.fromHSV(i, 1, 1))) end
+    uig.Color = ColorSequence.new(stops)
+
+    local knob = Instance.new("Frame", sliderFrame); knob.Size = UDim2.new(0, 20, 0, 20); knob.AnchorPoint = Vector2.new(0.5, 0.5); knob.Position = UDim2.new(0.5, 0, 0.5, 0); knob.BackgroundColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    Instance.new("UIStroke", knob).Thickness = 2
+
+    local colorPreview = Instance.new("Frame", f); colorPreview.Size = UDim2.new(0, 60, 0, 25); colorPreview.Position = UDim2.new(1, -75, 0, 10); colorPreview.BackgroundColor3 = Config[var]
+    Instance.new("UICorner", colorPreview).CornerRadius = UDim.new(0, 5)
+
+    local rbToggle = Instance.new("TextButton", f); rbToggle.Size = UDim2.new(0, 70, 0, 30); rbToggle.Position = UDim2.new(1, -85, 0, 42.5); rbToggle.BackgroundColor3 = Config[rainbowVar] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+    rbToggle.Text = "RAINBOW"; rbToggle.TextColor3 = Color3.new(1,1,1); rbToggle.Font = "Code"; rbToggle.TextSize = 12
+    rbToggle.TextStrokeTransparency = 0
+    rbToggle.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UICorner", rbToggle).CornerRadius = UDim.new(0, 5)
+
+    -- SPEED INPUT
+    local speedL = Instance.new("TextLabel", f); speedL.Size = UDim2.new(0, 120, 0, 30); speedL.Position = UDim2.new(0, 15, 0, 85); speedL.BackgroundTransparency = 1; speedL.Text = "Rainbow Speed:"; speedL.TextColor3 = Color3.new(1,1,1); speedL.Font = "Code"; speedL.TextSize = 16; speedL.TextXAlignment = "Left"
+    speedL.TextStrokeTransparency = 0; speedL.TextStrokeColor3 = Color3.new(0,0,0)
+    local speedI = Instance.new("TextBox", f); speedI.Size = UDim2.new(0, 80, 0, 30); speedI.Position = UDim2.new(0, 140, 0, 85); speedI.BackgroundColor3 = Color3.fromRGB(10, 12, 20); speedI.TextColor3 = Color3.new(1,1,1); speedI.Font = "Code"; speedI.TextSize = 16; speedI.Text = tostring(Config[speedVar])
+    Instance.new("UICorner", speedI).CornerRadius = UDim.new(0, 5)
+    speedI.FocusLost:Connect(function() Config[speedVar] = tonumber(speedI.Text) or Config[speedVar]; speedI.Text = tostring(Config[speedVar]) end)
+    UIObjects.Inputs[speedVar] = speedI
+    
+    local currentDragging = false
+
+    local function update(input)
+        local pos = math.clamp((input.Position.X - sliderFrame.AbsolutePosition.X) / sliderFrame.AbsoluteSize.X, 0, 1)
+        knob.Position = UDim2.new(pos, 0, 0.5, 0)
+        local newCol = Color3.fromHSV(pos, 1, 1)
+        Config[var] = newCol
+        colorPreview.BackgroundColor3 = newCol
+        UpdateMainUIColours()
+    end
+
+    sliderFrame.InputBegan:Connect(function(input) 
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+            ColorDragging = true
+            currentDragging = true
+            update(input) 
+        end 
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input) 
+        if currentDragging and input.UserInputType == Enum.UserInputType.MouseMovement then 
+            update(input) 
+        end 
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input) 
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+            ColorDragging = false 
+            currentDragging = false
+        end 
+    end)
+
+    rbToggle.MouseButton1Click:Connect(function()
+        Config[rainbowVar] = not Config[rainbowVar]
+        rbToggle.BackgroundColor3 = Config[rainbowVar] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+    end)
+
+    local function sync()
+        local h, s, v = Color3.toHSV(Config[var])
+        knob.Position = UDim2.new(h, 0, 0.5, 0)
+        colorPreview.BackgroundColor3 = Config[var]
+        rbToggle.BackgroundColor3 = Config[rainbowVar] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+        speedI.Text = tostring(Config[speedVar])
+    end
+    
+    UIObjects.ColorPickers[var] = {UpdateFromConfig = sync}
+    sync()
+
+    task.spawn(function()
+        while true do
+            if Config[rainbowVar] then
+                local hue = tick() % Config[speedVar] / Config[speedVar]
+                local rbCol = Color3.fromHSV(hue, 1, 1)
+                Config[var] = rbCol
+                colorPreview.BackgroundColor3 = rbCol
+                knob.Position = UDim2.new(hue, 0, 0.5, 0)
+                UpdateMainUIColours()
+            end
+            task.wait()
+        end
+    end)
+end
+
+local function AddDropdown(parent, text, options, callback)
+    local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -15, 0, 60); f.BackgroundColor3 = Color3.fromRGB(20, 25, 35); f.ClipsDescendants = true; f.ZIndex = 20
+    f.LayoutOrder = nextOrder()
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 9)
+    local currentVal = (text == "TRACER TYPE" or text == "CHOOSE CONFIG") and (text == "TRACER TYPE" and Config.TracerType or Config.SelectedConfigName) or ""
+    local b = Instance.new("TextButton", f); b.Size = UDim2.new(1, 0, 0, 60); b.BackgroundTransparency = 1; b.Text = text .. ": " .. currentVal; b.TextColor3 = Color3.new(1,1,1); b.Font = "Code"; b.TextSize = 19.5; b.ZIndex = 21
+    b.TextStrokeTransparency = 0
+    b.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UIStroke", b).Thickness = 1.2
+    
+    local open = false
+    local container = Instance.new("Frame", f); container.Size = UDim2.new(1, 0, 0, #options * 45); container.Position = UDim2.new(0, 0, 0, 60); container.BackgroundTransparency = 1; container.ZIndex = 21
+    Instance.new("UIListLayout", container)
+
+    for _, opt in pairs(options) do
+        local ob = Instance.new("TextButton", container); ob.Size = UDim2.new(1, 0, 0, 45); ob.BackgroundColor3 = Color3.fromRGB(30, 35, 50); ob.Text = opt; ob.TextColor3 = Color3.new(0.7,0.7,0.7); ob.Font = "Code"; ob.TextSize = 16.5; ob.BorderSizePixel = 0; ob.ZIndex = 22
+        ob.TextStrokeTransparency = 0
+        ob.TextStrokeColor3 = Color3.new(0,0,0)
+        ob.MouseButton1Click:Connect(function()
+            b.Text = text .. ": " .. opt; callback(opt)
+            open = false; f.Size = UDim2.new(1, -15, 0, 60)
+        end)
+    end
+
+    b.MouseButton1Click:Connect(function()
+        open = not open; f.Size = open and UDim2.new(1, -15, 0, 60 + (#options * 45)) or UDim2.new(1, -15, 0, 60)
+    end)
+    return b
+end
+
+local function AddTeleBtn(parent, text, coords)
+    local b = Instance.new("TextButton", parent); b.Size = UDim2.new(1, -15, 0, 60); b.BackgroundColor3 = Color3.fromRGB(40, 50, 70); 
+    b.Text = text;
+    b.TextColor3 = Color3.new(1, 1, 1); b.Font = "Code"; b.TextSize = 19.5
+    b.TextStrokeTransparency = 0
+    b.TextStrokeColor3 = Color3.new(0,0,0)
+    b.LayoutOrder = nextOrder()
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+    Instance.new("UIStroke", b).Thickness = 1.2
+    b.MouseButton1Click:Connect(function() local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") if hrp then hrp.CFrame = CFrame.new(coords) end end)
+end
+
+local function ApplyLootCham(container)
+    local attachment = container:FindFirstChild("Attachment")
+    local prompt = attachment and attachment:FindFirstChild("ContainerPrompt")
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+
+    local objectName = prompt.ObjectText
+    local setting = LootSettings[objectName]
+    if not setting then return end
+
+    local adorneePart = container:FindFirstChild("Main") or container:IsA("BasePart") and container or container:FindFirstChildOfClass("BasePart")
+    if not adorneePart then return end
+
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "GeminiLootCham"
+    box.Size = adorneePart.Size + Vector3.new(0.05, 0.05, 0.05)
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Adornee = adorneePart
+    box.Color3 = setting.Color
+    box.Transparency = 0.5
+    box.Visible = false
+    box.Parent = adorneePart
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not Running or not container or not container.Parent then
+            box:Destroy(); connection:Disconnect()
+            return
+        end
+        local isEnabled = LootToggles[objectName]
+        box.Visible = isEnabled
+    end)
+end
+
+local function initLoot()
+    for _, item in pairs(workspace:GetDescendants()) do
+        if item.Name == "ContainerPrompt" and item:IsA("ProximityPrompt") then
+            task.spawn(ApplyLootCham, item.Parent.Parent)
+        end
+    end
+end
+
+initLoot()
+workspace.DescendantAdded:Connect(function(d)
+    if d.Name == "ContainerPrompt" then
+        task.wait(0.5)
+        ApplyLootCham(d.Parent.Parent)
+    end
+end)
+
+local ExtractGuis = {}
+local ZonesFolder = workspace:FindFirstChild("ExtractionZones")
+if ZonesFolder then
+    for _, zone in pairs(ZonesFolder:GetChildren()) do
+        if zone:IsA("BasePart") then
+            local bbg = Instance.new("BillboardGui", ScreenGui)
+            bbg.Adornee = zone
+            bbg.Size = UDim2.new(0, 300, 0, 75)
+            bbg.AlwaysOnTop = true
+            bbg.StudsOffset = Vector3.new(0, 22.5, 0)
+            bbg.Enabled = false
+            
+            local lbl = Instance.new("TextLabel", bbg)
+            lbl.Size = UDim2.new(1, 0, 1, 0); lbl.BackgroundTransparency = 1; lbl.Text = "EXTRACT POINT"; lbl.Font = "Code"; lbl.TextSize = 37.5; lbl.TextStrokeTransparency = 0
+            lbl.TextStrokeColor3 = Color3.new(0,0,0)
+            Instance.new("UIStroke", lbl).Thickness = 1.5
+            ExtractGuis[bbg] = lbl
+        end
+    end
+end
+
+AddTab("COMBAT", CombatP); AddTab("MOVEMENT", MoveP); AddTab("TELEPORT", TeleportP); AddTab("VISUAL", VisualP); AddTab("CONTAINER CHAMS", LootP); AddTab("MISC", MiscP); AddTab("AUTOLOOTER", AutoLootP); AddTab("CONFIGS", ConfigP)
+
+local LootHeader = Instance.new("Frame", AutoLootP)
+LootHeader.Size = UDim2.new(1, -15, 0, 45); LootHeader.BackgroundTransparency = 1; LootHeader.Position = UDim2.new(0, 0, 0, 0)
+local TabListLayout = Instance.new("UIListLayout", LootHeader)
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal; TabListLayout.Padding = UDim.new(0, 5)
+
+local ItemListFrame = Instance.new("ScrollingFrame", AutoLootP)
+ItemListFrame.Size = UDim2.new(1, -15, 1, -60); ItemListFrame.Position = UDim2.new(0, 0, 0, 60); ItemListFrame.BackgroundTransparency = 1
+ItemListFrame.ScrollBarThickness = 4.5; ItemListFrame.BorderSizePixel = 0; ItemListFrame.CanvasSize = UDim2.new(0,0,0,0)
+local ItemListLayout = Instance.new("UIListLayout", ItemListFrame); ItemListLayout.Padding = UDim.new(0, 8)
+
+local function UpdateAutoLootList(category)
+    for _, v in pairs(ItemListFrame:GetChildren()) do if not v:IsA("UIListLayout") then v:Destroy() end end
+    local items = {}
+    for name, id in pairs(Database[category]) do table.insert(items, {n = name, i = id}) end
+    table.sort(items, function(a,b) return a.n < b.n end)
+
+    for _, data in ipairs(items) do
+        local idStr = "rbxassetid://" .. data.i
+        local row = Instance.new("Frame", ItemListFrame)
+        row.Size = UDim2.new(1, -10, 0, 70); row.BackgroundColor3 = Color3.fromRGB(20, 25, 40); row.BorderSizePixel = 0
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 9)
+
+        local preview = Instance.new("ImageLabel", row)
+        preview.Size = UDim2.new(0, 60, 0, 60); preview.Position = UDim2.new(0, 5, 0, 5); preview.Image = idStr; preview.BackgroundTransparency = 1
+
+        local label = Instance.new("TextLabel", row)
+        label.Size = UDim2.new(0.5, 0, 1, 0); label.Position = UDim2.new(0, 75, 0, 0); label.BackgroundTransparency = 1
+        label.Text = data.n; label.TextColor3 = Color3.new(1,1,1); label.Font = "Code"; label.TextSize = 18; label.TextXAlignment = "Left"
+        label.TextStrokeTransparency = 0
+        label.TextStrokeColor3 = Color3.new(0,0,0)
+        Instance.new("UIStroke", label).Thickness = 1.2
+
+        local toggle = Instance.new("TextButton", row)
+        toggle.Size = UDim2.new(0, 130, 0, 40); toggle.Position = UDim2.new(1, -145, 0.5, -20)
+        toggle.Text = LootSettingsData[idStr] and "ENABLED" or "DISABLED"
+        toggle.BackgroundColor3 = LootSettingsData[idStr] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+        toggle.TextColor3 = Color3.new(1,1,1); toggle.Font = "Code"; toggle.TextSize = 16
+        toggle.TextStrokeTransparency = 0
+        toggle.TextStrokeColor3 = Color3.new(0,0,0)
+        Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 7)
+        Instance.new("UIStroke", toggle).Thickness = 1.2
+
+        toggle.MouseButton1Click:Connect(function()
+            LootSettingsData[idStr] = not LootSettingsData[idStr]
+            toggle.Text = LootSettingsData[idStr] and "ENABLED" or "DISABLED"
+            toggle.BackgroundColor3 = LootSettingsData[idStr] and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(30, 35, 55)
+        end)
+    end
+    ItemListFrame.CanvasSize = UDim2.new(0, 0, 0, #items * 78)
+end
+
+for catName, _ in pairs(Database) do
+    local b = Instance.new("TextButton", LootHeader)
+    b.Size = UDim2.new(0, 110, 1, 0); b.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    b.Text = catName; b.TextColor3 = Color3.new(1,1,1); b.Font = "Code"; b.TextSize = 14
+    b.TextStrokeTransparency = 0
+    b.TextStrokeColor3 = Color3.new(0,0,0)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIStroke", b).Thickness = 1.2
+    b.MouseButton1Click:Connect(function() UpdateAutoLootList(catName) end)
+end
+UpdateAutoLootList("Guns")
+
+local function VirtualClick(guiObject)
+    if not guiObject then return end
+    for _, eventName in ipairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
+        local signal = guiObject[eventName]
+        if signal then for _, connection in pairs(getconnections(signal)) do connection:Fire() end end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if not Running then return end
+    local InvUI = LocalPlayer.PlayerGui:FindFirstChild("InventoryScreenUI")
+    local LootFrame = InvUI and InvUI.MainFrame:FindFirstChild("LootingFrameBottomRight")
+    local SlotFrame = LootFrame and LootFrame:FindFirstChild("LootingSlotFrame")
+    if SlotFrame and LootFrame.Visible then
+        for _, slot in pairs(SlotFrame:GetChildren()) do
+            local icon = slot:FindFirstChild("Icon")
+            if icon and icon:IsA("ImageLabel") and LootSettingsData[icon.Image] then 
+                VirtualClick(slot)
+                break 
+            end
+        end
+    end
+end)
+
+-- COMBAT PAGE
+AddSeparator(CombatP, "silent aim")
+AddToggle(CombatP, "SILENT AIM", "Enabled")
+AddInput(CombatP, "FOV SIZE", "FOV", false)
+
+AddSeparator(CombatP, "gun mods")
+AddToggle(CombatP, "0 RECOIL (perm)", "RecoilMod")
+AddToggle(CombatP, "FIRE RATE (perm)", "FireRateMod")
+
+AddSeparator(CombatP, "misc")
+AddToggle(CombatP, "AUTO HEAL", "AutoHeal")
+AddToggle(CombatP, "THIRD PERSON (X)", "ThirdPerson")
+
+-- MOVEMENT PAGE
+AddSeparator(MoveP, "fly controls")
+AddToggle(MoveP, "FLIGHT (ALT)", "Flying")
+AddInput(MoveP, "FLY SPEED", "FlySpeed", false)
+
+-- TELEPORT PAGE
+AddSeparator(TeleportP, "extractions")
+AddTeleBtn(TeleportP, "ZONE 1", Vector3.new(-1622.769, 16.865, 2615.400))
+AddTeleBtn(TeleportP, "ZONE 2", Vector3.new(391.498, 197.239, 3784.972))
+AddTeleBtn(TeleportP, "ZONE 3", Vector3.new(1493.881, 240.485, 2378.977))
+AddTeleBtn(TeleportP, "ZONE 4", Vector3.new(1473.188, 145.850, 1406.902))
+
+AddSeparator(TeleportP, "locations")
+AddTeleBtn(TeleportP, "BUNKER", Vector3.new(-1306.741, -41.796, 1510.745))
+AddTeleBtn(TeleportP, "CATACOMBS", Vector3.new(-538.133, -24.324, 881.143))
+AddTeleBtn(TeleportP, "MILITARY BASE", Vector3.new(-13.787, 165.749, 3617.597))
+
+-- VISUAL PAGE
+AddSeparator(VisualP, "player visuals")
+AddToggle(VisualP, "PLAYER CHAMS", "Chams")
+AddColorPicker(VisualP, "FOV Circle Color", "FOVColor", "RainbowFOV", "FOVRSpeed")
+AddColorPicker(VisualP, "Main UI Color", "MainUIColor", "RainbowMain", "MainRSpeed")
+
+AddSeparator(VisualP, "world visuals")
+AddToggle(VisualP, "EXTRACT ESP", "ExtractESP")
+AddToggle(VisualP, "FULLBRIGHT", "FullBright")
+AddToggle(VisualP, "HIDE FOLIAGE", "HideFoliage")
+
+AddSeparator(VisualP, "tracers")
+AddToggle(VisualP, "TRACERS", "TracerEnabled")
+AddColorPicker(VisualP, "TRACER COLOR", "TracerColor", "RainbowTracer", "TracerRSpeed")
+AddDropdown(VisualP, "TRACER TYPE", {"Lightning", "Lightning (Simple)", "Star", "Glow"}, function(val)
+    Config.TracerType = val
+    Config.TracerTexture = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. TracerIDs[val] .. "&width=420&height=420&format=png"
+end)
+AddInput(VisualP, "TRACER LIFETIME", "TracerTime", false)
+
+-- CONTAINER CHAMS PAGE
+AddSeparator(LootP, "loot esp")
+AddLootToggle(LootP, "Army Cache")
+AddLootToggle(LootP, "Army Tech Bin")
+AddLootToggle(LootP, "Old Wartime Cache")
+AddLootToggle(LootP, "Wooden Crate")
+AddLootToggle(LootP, "Wooden Crates")
+AddLootToggle(LootP, "Medical Supply")
+AddLootToggle(LootP, "Army Storage Bin")
+AddLootToggle(LootP, "Metal Box")
+
+-- MISC PAGE
+AddSeparator(MiscP, "gameplay")
+AddToggle(MiscP, "INSTANT INTERACT", "InstantInteract")
+AddToggle(MiscP, "HIDE USERNAME", "HideUsername")
+
+AddSeparator(MiscP, "sounds")
+AddToggle(MiscP, "MUSIC PLAYER", "MusicEnabled")
+AddInput(MiscP, "HIT SOUND ID", "HitSoundID", true)
+AddInput(MiscP, "KILL SOUND ID", "KillSoundID", true)
+
+-- CONFIG PAGE
+AddSeparator(ConfigP, "management")
+AddInput(ConfigP, "CONFIG NAME", "SelectedConfigName", false)
+local function GetConfigList()
+    local list = {}
+    local files = listfiles("EpstienConfigs")
+    for _, file in pairs(files) do
+        if file:sub(-5) == ".json" then
+            local name = file:match("([^\\/]+)%.json$")
+            if name then table.insert(list, name) end
+        end
+    end
+    if #list == 0 then table.insert(list, "EpsteinConfig") end
+    return list
+end
+
+local ConfigDropdown = AddDropdown(ConfigP, "CHOOSE CONFIG", GetConfigList(), function(val)
+    Config.SelectedConfigName = val
+end)
+
+local RefreshBtn = Instance.new("TextButton", ConfigP)
+RefreshBtn.Size = UDim2.new(1, -15, 0, 60); RefreshBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60); RefreshBtn.Text = "REFRESH LIST"; RefreshBtn.TextColor3 = Color3.new(1, 1, 1); RefreshBtn.Font = "Code"; RefreshBtn.TextSize = 19.5; Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 9)
+RefreshBtn.TextStrokeTransparency = 0
+RefreshBtn.TextStrokeColor3 = Color3.new(0,0,0)
+RefreshBtn.LayoutOrder = nextOrder()
+Instance.new("UIStroke", RefreshBtn).Thickness = 1.2
+RefreshBtn.MouseButton1Click:Connect(function()
+    local newList = GetConfigList()
+    local dropdownFrame = ConfigDropdown.Parent
+    -- Clean existing dropdown options
+    for _, child in pairs(dropdownFrame:FindFirstChildOfClass("Frame"):GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    -- Re-populate
+    local container = dropdownFrame:FindFirstChildOfClass("Frame")
+    for _, opt in pairs(newList) do
+        local ob = Instance.new("TextButton", container); ob.Size = UDim2.new(1, 0, 0, 45); ob.BackgroundColor3 = Color3.fromRGB(30, 35, 50); ob.Text = opt; ob.TextColor3 = Color3.new(0.7,0.7,0.7); ob.Font = "Code"; ob.TextSize = 16.5; ob.BorderSizePixel = 0; ob.ZIndex = 22
+        ob.TextStrokeTransparency = 0
+        ob.TextStrokeColor3 = Color3.new(0,0,0)
+        ob.MouseButton1Click:Connect(function()
+            ConfigDropdown.Text = "CHOOSE CONFIG: " .. opt; Config.SelectedConfigName = opt
+            dropdownFrame.Size = UDim2.new(1, -15, 0, 60)
+        end)
+    end
+    container.Size = UDim2.new(1, 0, 0, #newList * 45)
+end)
+
+local SaveBtn = Instance.new("TextButton", ConfigP)
+SaveBtn.Size = UDim2.new(1, -15, 0, 60); SaveBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 40); SaveBtn.Text = "SAVE CONFIG"; SaveBtn.TextColor3 = Color3.new(1, 1, 1); SaveBtn.Font = "Code"; SaveBtn.TextSize = 19.5; Instance.new("UICorner", SaveBtn).CornerRadius = UDim.new(0, 9)
+SaveBtn.TextStrokeTransparency = 0
+SaveBtn.TextStrokeColor3 = Color3.new(0,0,0)
+SaveBtn.LayoutOrder = nextOrder()
+Instance.new("UIStroke", SaveBtn).Thickness = 1.2
+SaveBtn.MouseButton1Click:Connect(function() SaveConfig() end)
+local LoadBtn = Instance.new("TextButton", ConfigP)
+LoadBtn.Size = UDim2.new(1, -15, 0, 60); LoadBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 100); LoadBtn.Text = "LOAD CONFIG"; LoadBtn.TextColor3 = Color3.new(1, 1, 1); LoadBtn.Font = "Code"; LoadBtn.TextSize = 19.5; Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 9)
+LoadBtn.TextStrokeTransparency = 0
+LoadBtn.TextStrokeColor3 = Color3.new(0,0,0)
+LoadBtn.LayoutOrder = nextOrder()
+Instance.new("UIStroke", LoadBtn).Thickness = 1.2
+LoadBtn.MouseButton1Click:Connect(function() LoadConfig(Config.SelectedConfigName) end)
+
+local MinimizeSideBtn = Instance.new("TextButton", Sidebar)
+MinimizeSideBtn.Size = UDim2.new(1, 0, 0, 60); MinimizeSideBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 60)
+MinimizeSideBtn.Text = "MINIMIZE"; MinimizeSideBtn.TextColor3 = Color3.new(1,1,1); MinimizeSideBtn.Font = "Code"; MinimizeSideBtn.TextSize = 21
+MinimizeSideBtn.TextStrokeTransparency = 0
+MinimizeSideBtn.TextStrokeColor3 = Color3.new(0,0,0)
+Instance.new("UICorner", MinimizeSideBtn).CornerRadius = UDim.new(0, 9)
+Instance.new("UIStroke", MinimizeSideBtn).Thickness = 1.5
+MinimizeSideBtn.MouseButton1Click:Connect(function() Main.Visible = false; MiniBox.Visible = true end)
+MiniBox.MouseButton1Click:Connect(function() Main.Visible = true; MiniBox.Visible = false end)
+
+local UnloadBtn = Instance.new("TextButton", Sidebar)
+UnloadBtn.Size = UDim2.new(1, 0, 0, 60); UnloadBtn.BackgroundColor3 = Color3.fromRGB(120, 30, 30); UnloadBtn.Text = "UNLOAD";
+UnloadBtn.TextColor3 = Color3.new(1,1,1); UnloadBtn.Font = "Code"; UnloadBtn.TextSize = 21
+UnloadBtn.TextStrokeTransparency = 0
+UnloadBtn.TextStrokeColor3 = Color3.new(0,0,0)
+Instance.new("UICorner", UnloadBtn).CornerRadius = UDim.new(0, 9)
+Instance.new("UIStroke", UnloadBtn).Thickness = 1.5
+UnloadBtn.MouseButton1Click:Connect(function()
+    Running = false
+    for k, v in pairs(Config) do if typeof(v) == "boolean" then Config[k] = false end end
+    LoopSFX:Stop(); HitSFX:Destroy(); KillSFX:Destroy(); LoopSFX:Destroy()
+    for _, v in pairs(Players:GetPlayers()) do if v.Character and v.Character:FindFirstChild("GeminiCham") then v.Character.GeminiCham:Destroy() end end
+    ScreenGui:Destroy()
+end)
+
+-- UI DRAGGING LOGIC (With Color Dragging Protection)
+local function MakeDraggable(obj)
+    local dragging, dragStart, startPos
+    obj.InputBegan:Connect(function(input) 
+        if not ColorDragging and input.UserInputType == Enum.UserInputType.MouseButton1 then 
+            dragging = true; dragStart = input.Position; startPos = obj.Position 
+        end 
+    end)
+    UserInputService.InputChanged:Connect(function(input) 
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then 
+            local delta = input.Position - dragStart; obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) 
+        end 
+    end)
+    UserInputService.InputEnded:Connect(function(input) 
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+            dragging = false 
+        end 
+    end)
+end
+MakeDraggable(Main); MakeDraggable(MiniBox)
+
+local function OverrideSound(v)
+    if Running and Config.GunSoundID ~= "" and v:IsA("Sound") then
+        local n = v.Name:lower()
+        if n == "gunshot" or n == "suppressed" or n == "fire" or n:find("fire") then
+            v.SoundId = "rbxassetid://" .. Config.GunSoundID
+        end
+    end
+end
+LocalPlayer.CharacterAppearanceLoaded:Connect(function(char)
+    char.DescendantAdded:Connect(OverrideSound)
+    for _, v in pairs(char:GetDescendants()) do OverrideSound(v) end
+end)
+if LocalPlayer.Character then
+    LocalPlayer.Character.DescendantAdded:Connect(OverrideSound)
+    for _, v in pairs(LocalPlayer.Character:GetDescendants()) do OverrideSound(v) end
+end
+
+local AmmoLabel = Instance.new("TextLabel", FOVDisc)
+AmmoLabel.Size = UDim2.new(0, 150, 0, 30); AmmoLabel.Position = UDim2.new(0.5, -75, 1, 7.5); AmmoLabel.BackgroundTransparency = 1; AmmoLabel.TextColor3 = Color3.new(1, 1, 1); AmmoLabel.Font = "Code"; AmmoLabel.TextSize = 21; AmmoLabel.TextStrokeTransparency = 0; AmmoLabel.ZIndex = 6
+AmmoLabel.TextStrokeColor3 = Color3.new(0,0,0)
+Instance.new("UIStroke", AmmoLabel).Thickness = 1.2
+
+local TargetLabel = Instance.new("TextLabel", FOVDisc)
+TargetLabel.Size = UDim2.new(0, 300, 0, 120); TargetLabel.Position = UDim2.new(0.5, -150, 1, 37.5); TargetLabel.BackgroundTransparency = 1; TargetLabel.TextColor3 = Color3.new(1, 1, 1); TargetLabel.Font = "Code"; TargetLabel.TextSize = 21; TargetLabel.TextStrokeTransparency = 0; TargetLabel.ZIndex = 6; TargetLabel.Visible = false
+TargetLabel.TextStrokeColor3 = Color3.new(0,0,0)
+Instance.new("UIStroke", TargetLabel).Thickness = 1.2
+
+local function GetTier(char, names)
+    for _, item in pairs(char:GetChildren()) do
+        for _, n in ipairs(names) do
+            if item.Name:find(n) then
+                if n == "Vest" or n == "ArmoredVest" then
+                    if item.Name:find("III") then return "3"
+                    elseif item.Name:find("II") then return "2"
+                    elseif item.Name:find("I") then return "1"
+                    end
+                end
+                if n == "Helmet" then
+                    if item.Name:find("Bicord") then return "3"
+                    elseif item.Name:find("MD97") then return "2"
+                    end
+                end
+                local t = item:GetAttribute("Tier")
+                if t then return tostring(t) end
+            end
+        end
+    end
+    return "None"
+end
+
+local function UpdateKillFeedNames()
+    if not Config.HideUsername then return end
+    local KillFeedUI = LocalPlayer.PlayerGui:FindFirstChild("KillFeedUI")
+    local KillFeedContainer = KillFeedUI and KillFeedUI:FindFirstChild("KillFeedContainer")
+    if not KillFeedContainer then return end
+    local myName = LocalPlayer.Name
+    local replacement = '<font color="#64FF64">discord.gg/xxMCwkahzc</font>'
+    for _, entry in pairs(KillFeedContainer:GetChildren()) do
+        local killText = entry:FindFirstChild("KillText")
+        if killText and killText:IsA("TextLabel") then
+            local text = killText.Text
+            if text:find(myName) then killText.Text = text:gsub(myName, replacement) end
+        end
+    end
+end
+
+local function UpdateHeaderName()
+    if not Config.HideUsername then return end
+    local mainFrame = LocalPlayer.PlayerGui:FindFirstChild("InventoryScreenUI") and LocalPlayer.PlayerGui.InventoryScreenUI:FindFirstChild("MainFrame")
+    local header = mainFrame and mainFrame:FindFirstChild("FrameMiddleLeft") and mainFrame.FrameMiddleLeft:FindFirstChild("TextLabelHeader2")
+    if header then
+        local myName = LocalPlayer.Name
+        local hue = tick() % 5 / 5
+        header.Text = header.Text:find(myName) and header.Text:gsub(myName, "discord.gg/xxMCwkahzc") or header.Text
+        header.TextColor3 = Color3.fromHSV(hue, 1, 1)
+    end
+end
+
+local KillFeedEvent = ReplicatedStorage:WaitForChild("KillFeedUpdate", 10)
+if KillFeedEvent then
+    KillFeedEvent.OnClientEvent:Connect(function(data)
+        if Running and data and data.killer == LocalPlayer.Name then KillSFX:Play() end
+    end)
+end
+
+local DamageEvent = ReplicatedStorage:WaitForChild("DamageNumber", 10)
+if DamageEvent then
+    DamageEvent.OnClientEvent:Connect(function(val)
+        if Running and typeof(val) == "number" then HitSFX:Play() end
+    end)
+end
+
+local CurrentTarget = nil
+RunService.RenderStepped:Connect(function()
+    if not Running then return end
+    local mouse = UserInputService:GetMouseLocation()
+    FOVDisc.Position, FOVDisc.Size = UDim2.new(0, mouse.X, 0, mouse.Y), UDim2.new(0, Config.FOV * 2, 0, Config.FOV * 2)
+    FOVDisc.Visible = Config.Enabled
+    CrosshairContainer.Position = UDim2.new(0, mouse.X, 0, mouse.Y)
+    CrosshairContainer.Visible = Config.CustomCrosshair
+    
+    CurrentTarget = nil
+    local bestDist = Config.FOV
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character then
+            local cham = v.Character:FindFirstChild("GeminiCham")
+            if Config.Chams then
+                if not cham then 
+                    cham = Instance.new("Highlight")
+                    cham.Name = "GeminiCham"
+                    cham.OutlineColor = Color3.new(1,1,1)
+                    cham.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    cham.Parent = v.Character
+                end
+                cham.Enabled = true
+                
+                -- HARDLOCKED VISIBILITY CHECKER (Fix for Rainbow changing chams)
+                local head = v.Character:FindFirstChild("Head")
+                if head then
+                    local _, visible = Camera:WorldToViewportPoint(head.Position)
+                    if visible then
+                        local params = RaycastParams.new()
+                        params.FilterDescendantsInstances = {LocalPlayer.Character, v.Character, workspace.CurrentCamera}
+                        params.FilterType = Enum.RaycastFilterType.Exclude
+
+                        local isObstructed = false
+                        local ray = workspace:Raycast(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * (head.Position - Camera.CFrame.Position).Magnitude, params)
+                        if ray then isObstructed = true end
+                        
+                        cham.FillColor = isObstructed and Color3.new(1, 0, 0) or Color3.new(0, 1, 0)
+                    else
+                        cham.FillColor = Color3.new(1, 0, 0)
+                    end
+                end
+                cham.Adornee = v.Character 
+            elseif cham then cham.Enabled = false end
+            
+            local hum = v.Character:FindFirstChildOfClass("Humanoid"); local targetPart = v.Character:FindFirstChild(Config.TargetPart)
+            if hum and hum.Health > 0 and targetPart then
+                local sPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then local d = (Vector2.new(sPos.X, sPos.Y) - mouse).Magnitude; if d < bestDist then bestDist = d; CurrentTarget = targetPart end end
+            end
+        end
+    end
+    
+    if CurrentTarget then
+        local char = CurrentTarget.Parent; local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - CurrentTarget.Position).Magnitude)
+        local tool = char:FindFirstChildOfClass("Tool"); local weaponName = "None"
+        if tool then 
+            local fullName = tool.Name; local dotIndex = fullName:find("%.") 
+            weaponName = dotIndex and fullName:sub(dotIndex + 1) or fullName 
+        end
+        local hTier = GetTier(char, {"Helmet"}); local vTier = GetTier(char, {"Vest", "ArmoredVest"})
+        TargetLabel.Visible = Config.Enabled
+        TargetLabel.Text = string.format("Target: %s\nHP: %d\nGun: %s\nHelmet: %s\nVest: %s\nDistance: %d studs", char.Name:sub(1,12), math.floor(char.Humanoid.Health), weaponName, (hTier == "None") and "None" or ("tier " .. hTier), (vTier == "None") and "None" or ("tier " .. vTier), dist)
+    else TargetLabel.Visible = false end
+
+    local hue = tick() % 5 / 5
+    for gui, label in pairs(ExtractGuis) do gui.Enabled = Config.ExtractESP; label.TextColor3 = Color3.fromHSV(hue, 1, 1) end
+    UpdateKillFeedNames(); UpdateHeaderName()
+end)
+
+local old; old = hookmetamethod(game, "__namecall", function(self, ...)
+    local method, args = getnamecallmethod(), {...}
+    if Running and not checkcaller() and method == "FireServer" and self.Name == "ShootBullet" then
+        local hitPoint = (Config.Enabled and CurrentTarget) and CurrentTarget.Position or (Camera.CFrame.Position + (Camera.CFrame.LookVector * 1000))
+        if Config.Enabled and CurrentTarget and typeof(args[1]) == "Vector3" then args[1] = (hitPoint - Camera.CFrame.Position).Unit end
+        task.spawn(function() CreateGlowTracer(Camera.CFrame.Position, hitPoint) end)
+    end
+    return old(self, unpack(args))
+end)
+
+UserInputService.InputBegan:Connect(function(i, g)
+    if not Running then return end
+    if i.KeyCode == Enum.KeyCode.Insert or i.KeyCode == Enum.KeyCode.Delete or i.KeyCode == Enum.KeyCode.RightShift then 
+        Main.Visible = not Main.Visible 
+        return 
+    end
+    if g then return end
+    if i.KeyCode == Enum.KeyCode.LeftAlt then
+        Config.Flying = not Config.Flying; local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if Config.Flying and root then
+            local bv = Instance.new("BodyVelocity", root); bv.Name = "FlyV"; bv.maxForce = Vector3.new(9e9,9e9,9e9)
+            task.spawn(function() while Running and Config.Flying and root.Parent do bv.velocity = Camera.CFrame.LookVector * Config.FlySpeed; RunService.Heartbeat:Wait() end; if bv then bv:Destroy() end end)
+        end
+    end
+    if i.KeyCode == Enum.KeyCode.X then
+        Config.ThirdPerson = not Config.ThirdPerson
+        if not Config.ThirdPerson then
+            Camera.CameraType = Enum.CameraType.Custom
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Running and Config.FullBright then
+        Lighting.Ambient = Color3.new(1, 1, 1); Lighting.Brightness = 2; Lighting.ClockTime = 14; Lighting.FogEnd = 100000; Lighting.GlobalShadows = false; Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    end
+end)
+
+local CamOffset = Vector3.new(3, 3, 15)
+local function HandleThirdPerson()
+    if not Running or not Config.ThirdPerson then return end
+    local char = LocalPlayer.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("LowerTorso") or char:FindFirstChild("UpperTorso")
+        if root then
+            Camera.CameraType = Enum.CameraType.Scriptable
+            local startPos = root.Position + Vector3.new(0, CamOffset.Y, 0)
+            local targetCFrame = CFrame.new(startPos) * Camera.CFrame.Rotation * CFrame.new(CamOffset.X, 0, CamOffset.Z)
+            Camera.CFrame = CFrame.new(targetCFrame.Position, root.Position + Vector3.new(0, CamOffset.Y, 0))
+        end
+    end
+end
+RunService.Heartbeat:Connect(HandleThirdPerson)
+RunService.RenderStepped:Connect(HandleThirdPerson)
+
+local medicalRemote = ReplicatedStorage:WaitForChild("MedicalHeal")
+local medKitName = "MedicalItem.MedKit1"
+local healAmount, healInterval, lastHealTime, sessionActive = 100, 0.02, 0, false
+
+local function ForceHold(char, tool)
+    if tool.Parent ~= char then tool.Parent = char end
+    local handle = tool:FindFirstChild("Handle")
+    if handle and not handle:FindFirstChild("PermanentWeld") then
+        local weld = Instance.new("Weld"); weld.Name = "PermanentWeld"
+        weld.Part0 = char:WaitForChild("UpperTorso") or char:WaitForChild("Torso")
+        weld.Part1 = handle; weld.C0 = UDim2.new(0, 0, 0.6) * CFrame.Angles(0, math.rad(90), 0)
+        weld.Parent = handle
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if not Running or not Config.AutoHeal then return end
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then sessionActive = false; return end
+    local medKit = character:FindFirstChild(medKitName) or LocalPlayer.Backpack:FindFirstChild(medKitName)
+    if not medKit then return end
+    ForceHold(character, medKit)
+    if humanoid.Health < 100 then
+        if not sessionActive then medicalRemote:FireServer("start", medKit); sessionActive = true end
+        if tick() - lastHealTime >= healInterval then lastHealTime = tick(); medicalRemote:FireServer("tick", medKit, healAmount) end
+    elseif sessionActive then medicalRemote:FireServer("stop", medKit); sessionActive = false end
+end)
+
+task.spawn(function()
+    while Running do
+        local hue = tick() % 5 / 5; RainbowLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
+        local char = LocalPlayer.Character; local tool = char and char:FindFirstChildOfClass("Tool")
+        if tool then
+            local ammo = tool:GetAttribute("Ammo") or tool:GetAttribute("CurrentAmmo"); local maxAmmo = tool:GetAttribute("MaxAmmo")
+            if ammo then AmmoLabel.Text = maxAmmo and (tostring(ammo) .. " / " .. tostring(maxAmmo)) or tostring(ammo); AmmoLabel.Visible = true else AmmoLabel.Visible = false end
+        else AmmoLabel.Visible = false end
+        task.wait(0.1)
+    end
+end)
+
+--// DUAL DETECTOR SYSTEM: MODERATORS & INVISIBLE/GODMODE SUSPECTS
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local Debris = game:GetService("Debris")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+-- Configuration
+local ModWebhook = "https://discord.com/api/webhooks/1486980657816141915/E5sdmymp425Exx2mHX4xrvuOvfHxOV5fXvJMGwM6UIh3csu_k-tf2aoV9Bn5-Agc18Ef"
+local JoinSoundID = "rbxassetid://139345986070502"
+local LeaveSoundID = "rbxassetid://6512108316"
+local MainColor = Color3.fromRGB(0, 120, 255)
+local SuspectColor = Color3.fromRGB(255, 165, 0) -- Orange for suspicious
+local InvisThreshold = 10 
+local IgnoredParts = {"HumanoidRootPart", "CameraPart", "CameraFocus"}
+
+-- Moderator Database
+local ModeratorList = {
+    [1919585601] = "Trial Mod",
+    [2992348601] = "Trial Mod", [7435665626] = "Trial Mod", [1088169531] = "Trial Mod",
+    [7943886234] = "Trial Mod", [4865405643] = "Trial Mod", [82605068] = "Trial Mod",
+    [859821811] = "Trial Mod", [3034390614] = "Trial Mod", [1741162600] = "Trial Mod",
+    [198496778] = "Moderator", [415445288] = "Moderator", [1135537287] = "Moderator",
+    [1009115736] = "Moderator", [2730650035] = "Moderator", [769661865] = "Moderator",
+    [1611249659] = "Moderator", [1451400719] = "Moderator", [530646367] = "Moderator",
+    [2258754394] = "Moderator", [3839334864] = "Moderator", [3603868418] = "Moderator",
+    [2799095632] = "Senior Mod", [7396282779] = "Senior Mod", [152924153] = "Mod Trainer",
+    [9243777705] = "Admin", [2948410386] = "Admin", [122621343] = "MOS",
+    [3013181336] = "Viper", [4362501928] = "Lemonade", [96198756] = "Viewported"
+}
+
+-- UI Setup
+local ScreenGui = Instance.new("ScreenGui", Players.LocalPlayer.PlayerGui)
+ScreenGui.Name = "DetectorSystemUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 2147483647
+
+-- Persistent UI Tables
+local ActiveEntries = {}
+local InvisTimers = {}
+local ModEntryCount = 0
+local InvisEntryCount = 0
+
+-- Function to create Main UI frames
+local function CreateMainFrame(name, pos, titleText)
+    local Frame = Instance.new("Frame", ScreenGui)
+    Frame.Name = name
+    Frame.Size = UDim2.new(0, 300, 0, 80)
+    Frame.Position = pos
+    Frame.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
+    Frame.BorderSizePixel = 0
+    Frame.Active = true
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
+    Instance.new("UIStroke", Frame).Color = MainColor
+
+    local TitleFrame = Instance.new("Frame", Frame)
+    TitleFrame.Size = UDim2.new(1, 0, 0, 30)
+    TitleFrame.BackgroundTransparency = 1
+    
+    local Title = Instance.new("TextLabel", TitleFrame)
+    Title.Size = UDim2.new(1, 0, 1, 0)
+    Title.BackgroundTransparency = 1
+    Title.TextColor3 = Color3.new(1, 1, 1)
+    Title.Font = "Code"
+    Title.TextSize = 14
+    Title.Text = titleText
+
+    local Container = Instance.new("Frame", Frame)
+    Container.Size = UDim2.new(1, -20, 1, -40)
+    Container.Position = UDim2.new(0, 10, 0, 35)
+    Container.BackgroundTransparency = 1
+    local Layout = Instance.new("UIListLayout", Container)
+    Layout.Padding = UDim.new(0, 8)
+
+    local Empty = Instance.new("TextLabel", Container)
+    Empty.Size = UDim2.new(1, 0, 0, 30)
+    Empty.BackgroundTransparency = 1
+    Empty.TextColor3 = Color3.fromRGB(0, 255, 100)
+    Empty.Font = "Code"
+    Empty.TextSize = 14
+    Empty.Text = name == "ModFrame" and "no mods in your server!" or "no suspicious activity!"
+
+    -- Dragging
+    local dragging, dragStart, startPos
+    Frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = input.Position; startPos = Frame.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+    return Frame, Container, Empty
+end
+
+local ModFrame, ModContainer, ModEmpty = CreateMainFrame("ModFrame", UDim2.new(1, -310, 0.2, 0), "mods in your server that we know of")
+local InvisFrame, InvisContainer, InvisEmpty = CreateMainFrame("InvisFrame", UDim2.new(1, -310, 0.2, 90), "possible mods (invis/godmode)")
+
+local function ResizeUI(frame, count, emptyLabel)
+    local targetHeight = count == 0 and 80 or (45 + (count * 60) + ((count - 1) * 8))
+    TweenService:Create(frame, TweenInfo.new(0.3), {Size = UDim2.new(0, 300, 0, targetHeight)}):Play()
+    emptyLabel.Visible = (count == 0)
+end
+
+local function CreateEntry(player, rank, isPossible)
+    if ActiveEntries[player.UserId] then return end
+    
+    local targetContainer = isPossible and InvisContainer or ModContainer
+    local f = Instance.new("Frame", targetContainer)
+    f.Size = UDim2.new(1, 0, 0, 60)
+    f.BackgroundColor3 = Color3.fromRGB(20, 25, 40)
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
+    local s = Instance.new("UIStroke", f)
+    s.Color = isPossible and SuspectColor or MainColor
+    
+    local l = Instance.new("TextLabel", f)
+    l.Size = UDim2.new(1, -20, 1, 0); l.Position = UDim2.new(0, 10, 0, 0); l.BackgroundTransparency = 1
+    l.TextColor3 = Color3.new(1, 1, 1); l.Font = "Code"; l.TextSize = 13; l.TextXAlignment = Enum.TextXAlignment.Left
+    
+    ActiveEntries[player.UserId] = {Frame = f, Label = l, Type = isPossible and "Invis" or "Mod"}
+    
+    if isPossible then InvisEntryCount = InvisEntryCount + 1 else ModEntryCount = ModEntryCount + 1 end
+    ResizeUI(ModFrame, ModEntryCount, ModEmpty)
+    ResizeUI(InvisFrame, InvisEntryCount, InvisEmpty)
+
+    task.spawn(function()
+        while player and player.Parent and ActiveEntries[player.UserId] do
+            local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+            local healthDisplay = "??"
+            
+            if hum then
+                local hp = hum.Health
+                local maxHp = hum.MaxHealth
+                if hp >= 9e9 or hp ~= hp then -- Check for extreme numbers or NaN
+                    healthDisplay = "inf"
+                else
+                    healthDisplay = tostring(math.floor(hp)) .. "/" .. tostring(math.floor(maxHp))
+                end
+            end
+            
+            l.Text = player.Name .. " [" .. rank .. "]\nhealth: " .. healthDisplay
+            task.wait(0.5)
+        end
+    end)
+end
+
+local function RemoveEntry(userId)
+    local data = ActiveEntries[userId]
+    if data then
+        if data.Type == "Invis" then InvisEntryCount = InvisEntryCount - 1 else ModEntryCount = ModEntryCount - 1 end
+        data.Frame:Destroy(); ActiveEntries[userId] = nil
+        ResizeUI(ModFrame, ModEntryCount, ModEmpty)
+        ResizeUI(InvisFrame, InvisEntryCount, InvisEmpty)
+    end
+end
+
+-- DETECTION LOOP
+RunService.Heartbeat:Connect(function()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == Players.LocalPlayer then continue end
+        local userId = player.UserId
+        local modRank = ModeratorList[userId]
+
+        -- Priority 1: Check known mods first
+        if modRank then
+            if not ActiveEntries[userId] then
+                CreateEntry(player, modRank, false)
+            end
+            continue
+        end
+
+        local char = player.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        local isSuspect = false
+        local suspectReason = "possible unknown mod"
+
+        -- Priority 2: Check for Godmode ("inf" health)
+        if hum then
+            local hp = hum.Health
+            if hp >= 9e9 or hp ~= hp then -- Check for extreme numbers or NaN
+                isSuspect = true
+                suspectReason = "possible mod (godmode)"
+            end
+        end
+
+        -- Priority 3: Check for Invisible Parts
+        if not isSuspect and char then
+            for _, p in pairs(char:GetChildren()) do
+                if p:IsA("BasePart") and p.Transparency >= 0.9 then
+                    local ignore = false
+                    for _, n in pairs(IgnoredParts) do if p.Name == n then ignore = true break end end
+                    if not ignore then isSuspect = true break end
+                end
+            end
+        end
+
+        -- Handle suspect tracking and UI entry
+        if isSuspect then
+            if not InvisTimers[userId] then InvisTimers[userId] = tick() end
+            if tick() - InvisTimers[userId] >= InvisThreshold and not ActiveEntries[userId] then
+                CreateEntry(player, suspectReason, true)
+            end
+        else
+            InvisTimers[userId] = nil
+            if ActiveEntries[userId] and ActiveEntries[userId].Type == "Invis" then RemoveEntry(userId) end
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    RemoveEntry(player.UserId); InvisTimers[player.UserId] = nil
+end)
