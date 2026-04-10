@@ -1,0 +1,1994 @@
+-- // 1. AC BYPASS (Runs on execution)
+for k, v in pairs(getgc(true)) do
+    if pcall(function() return rawget(v, "indexInstance") end) 
+    and type(rawget(v, "indexInstance")) == "table" 
+    and (rawget(v, "indexInstance"))[1] == "kick" then
+        setreadonly(v, false)
+        v.tvk = {"kick", function() return game.Workspace:WaitForChild("") end}
+    end
+end
+
+-- // [ADDED] Play audio on execution
+local AudioInstance = Instance.new("Sound")
+AudioInstance.SoundId = "rbxassetid://2502368191"
+AudioInstance.Volume = 1
+AudioInstance.Parent = workspace
+AudioInstance:Play()
+game:GetService("Debris"):AddItem(AudioInstance, 300)
+
+-- // 2. SERVICES & CONFIG
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TextService = game:GetService("TextService")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+
+local Config = {
+    Chams = {
+        Enabled = false,
+        Occluded = false,
+        Fill = {Color = Color3.fromRGB(255, 0, 0), Trans = 1},
+        Outline = {Color = Color3.fromRGB(255, 255, 255), Trans = 1},
+        ESPBoxes = false,
+        ESPNames = false,
+        ESPHealth = false,
+        ESPTracers = false,
+        TracerOriginTop = false
+    },
+    SilentAim = {
+        Enabled = false,
+        FOV = 100,
+        FOVColor = Color3.fromRGB(0, 255, 255),
+        TargetPart = "Head",
+        FillEnabled = false,
+        FillColor = Color3.fromRGB(0, 255, 255),
+        FillTrans = 0.4
+    },
+    Aimbot = {
+        Enabled = false,
+        Smoothing = 8,
+        PredictionAmount = 0.165,
+        TargetPart = "Head",
+        Key = Enum.UserInputType.MouseButton2,
+        ShowName = true,
+        ShowHealth = true,
+        ShowWeapon = true
+    },
+    Crosshair = {
+        Enabled = false,
+        CenterDot = false,
+        Spokes = 4,
+        Length = 10,
+        Gap = 5,
+        Width = 2,
+        Spin = 0,
+        FollowTarget = false,
+        Color = Color3.fromRGB(255, 255, 255),
+        Trans = 0
+    },
+    WalkSpeed = {
+        Enabled = false,
+        Speed = 24
+    },
+    Fly = {
+        Enabled = false,
+        Speed = 70
+    },
+    Combat = {
+        RecoilSpread = false,
+        FireRate = false
+    },
+    World = {
+        AmbientColor = Color3.fromRGB(255, 255, 255),
+        Brightness = 2,
+        ClockTime = 12,
+        RemoveTextures = false,
+        RemoveFoliage = false
+    },
+    TriggerBot = {
+        Enabled = false,
+        IsFiring = false
+    },
+    Running = true
+}
+
+local Defaults = {
+    WalkSpeed = 16,
+    SilentAimFOV = 100,
+    FOVColor = Color3.fromRGB(0, 255, 255),
+    FOVFillColor = Color3.fromRGB(0, 255, 255),
+    FOVFillTrans = 0.4,
+    AimbotSmoothing = 8,
+    FillColor = Color3.fromRGB(255, 0, 0),
+    FillTrans = 1,
+    OutlineColor = Color3.fromRGB(255, 255, 255),
+    OutlineTrans = 1
+}
+
+-- // 3. CHAMS FOLDER
+local ChamsFolder = Instance.new("Folder")
+ChamsFolder.Name = "chams_cache"
+ChamsFolder.Parent = CoreGui
+
+local TriggerBotConnection, SilentAimConnection, ChamsConnection, FOVCircleConnection
+local AimbotConnection, CrosshairConnection, ESPConnection
+local FOVFillFrame, DrawingAvailable, FOVInfoText
+local CrosshairLines = {}
+local CrosshairDot = nil
+local CrosshairStep = 0
+local AimbotTarget = nil
+
+local function NewDrawing(kind)
+    if typeof(Drawing) ~= "table" then return nil end
+    local ok, obj = pcall(function() return Drawing.new(kind) end)
+    return ok and obj or nil
+end
+
+-- // 4. TRIGGERBOT LOGIC
+local foliageFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Foliage")
+local grassFolder = workspace:FindFirstChild("GrassInstances")
+
+TriggerBotConnection = RunService.RenderStepped:Connect(function()
+    if not Config.Running or not Config.TriggerBot.Enabled then
+        if Config.TriggerBot.IsFiring then
+            Config.TriggerBot.IsFiring = false
+            if mouse1release then mouse1release() end
+        end
+        return
+    end
+
+    local screenSize = Camera.ViewportSize
+    local unitRay = Camera:ViewportPointToRay(screenSize.X / 2, screenSize.Y / 2)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    local ignoreList = {LocalPlayer.Character, Camera}
+    if foliageFolder then table.insert(ignoreList, foliageFolder) end
+    raycastParams.FilterDescendantsInstances = ignoreList
+
+    local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, raycastParams)
+    local foundTarget = false
+    if result and result.Instance then
+        local model = result.Instance:FindFirstAncestorOfClass("Model")
+        local hum = model and model:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 and model.Name ~= LocalPlayer.Name then
+            foundTarget = true
+        end
+    end
+
+    if foundTarget then
+        if not Config.TriggerBot.IsFiring then
+            Config.TriggerBot.IsFiring = true
+            if mouse1press then mouse1press() end
+        end
+    else
+        if Config.TriggerBot.IsFiring then
+            Config.TriggerBot.IsFiring = false
+            if mouse1release then mouse1release() end
+        end
+    end
+end)
+
+-- // 5. SILENT AIM & WALKSPEED LOOP
+local CurrentTarget, TargetVelocity = nil, Vector3.new()
+local LastTargetPos, LastTargetTime = nil, tick()
+
+local function GetTarget()
+    local mouse = UserInputService:GetMouseLocation()
+    local bestDist = Config.SilentAim.FOV
+    local target = nil
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character then
+            local hum = v.Character:FindFirstChildOfClass("Humanoid")
+            local part = v.Character:FindFirstChild(Config.SilentAim.TargetPart)
+            if hum and hum.Health > 0 and part then
+                local sPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local d = (Vector2.new(sPos.X, sPos.Y) - mouse).Magnitude
+                    if d < bestDist then bestDist = d; target = part end
+                end
+            end
+        end
+    end
+    return target
+end
+
+local function IsAlive(plr)
+    if not plr or not plr.Character then return false end
+    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0 and plr.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetAimbotTarget()
+    local mouse = UserInputService:GetMouseLocation()
+    local bestDist = Config.SilentAim.FOV
+    local target = nil
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and IsAlive(v) then
+            local part = v.Character:FindFirstChild(Config.Aimbot.TargetPart)
+            if part then
+                local sPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local d = (Vector2.new(sPos.X, sPos.Y) - mouse).Magnitude
+                    if d < bestDist then bestDist = d; target = part end
+                end
+            end
+        end
+    end
+    return target
+end
+
+SilentAimConnection = RunService.RenderStepped:Connect(function()
+    if not Config.Running then return end
+    CurrentTarget = GetTarget()
+    if CurrentTarget then
+        if LastTargetPos then
+            local dt = tick() - LastTargetTime
+            if dt > 0 then TargetVelocity = (CurrentTarget.Position - LastTargetPos) / dt end
+        end
+        LastTargetPos = CurrentTarget.Position
+        LastTargetTime = tick()
+    end
+    if Config.WalkSpeed.Enabled then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = Config.WalkSpeed.Speed end
+        end
+    end
+end)
+
+-- // 6. CHAMS HEARTBEAT
+ChamsConnection = RunService.Heartbeat:Connect(function()
+    if not Config.Chams.Enabled then ChamsFolder:ClearAllChildren(); return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local high = ChamsFolder:FindFirstChild(plr.Name)
+            if not high then
+                high = Instance.new("Highlight", ChamsFolder)
+                high.Name = plr.Name
+            end
+            high.Adornee = plr.Character
+            high.FillColor = Config.Chams.Fill.Color
+            high.OutlineColor = Config.Chams.Outline.Color
+            high.FillTransparency = 1 - Config.Chams.Fill.Trans
+            high.OutlineTransparency = 1 - Config.Chams.Outline.Trans
+            high.DepthMode = Config.Chams.Occluded
+                and Enum.HighlightDepthMode.Occluded
+                or Enum.HighlightDepthMode.AlwaysOnTop
+        end
+    end
+    for _, high in pairs(ChamsFolder:GetChildren()) do
+        if not Players:FindFirstChild(high.Name) then high:Destroy() end
+    end
+end)
+
+local ESPFolder = Instance.new("Folder", ScreenGui)
+ESPFolder.Name = "esp_cache"
+
+local function ClearESP()
+    ESPFolder:ClearAllChildren()
+end
+
+local function CreateESPContainer(plr)
+    local container = Instance.new("Frame", ESPFolder)
+    container.Name = plr.Name
+    container.BackgroundTransparency = 1
+    container.ClipsDescendants = true
+
+    local box = Instance.new("Frame", container)
+    box.Name = "Box"
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 0
+    box.ZIndex = 1
+    local stroke = Instance.new("UIStroke", box)
+    stroke.Thickness = 1
+    stroke.Color = Config.Chams.Outline.Color
+
+    local nameLabel = Instance.new("TextLabel", container)
+    nameLabel.Name = "Name"
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Font = Enum.Font.Code
+    nameLabel.TextSize = 14
+    nameLabel.TextColor3 = COLORS.TEXT_MAIN
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.ZIndex = 2
+
+    local healthBack = Instance.new("Frame", container)
+    healthBack.Name = "HealthBack"
+    healthBack.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    healthBack.BorderSizePixel = 0
+    healthBack.ZIndex = 2
+    local healthBar = Instance.new("Frame", healthBack)
+    healthBar.Name = "HealthBar"
+    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    healthBar.BorderSizePixel = 0
+    healthBar.ZIndex = 3
+
+    local tracer = Instance.new("Frame", container)
+    tracer.Name = "Tracer"
+    tracer.BackgroundColor3 = Config.Chams.Outline.Color
+    tracer.BorderSizePixel = 0
+    tracer.ZIndex = 1
+
+    return container
+end
+
+local function UpdateESP()
+    if not Config.Running or not (Config.Chams.ESPBoxes or Config.Chams.ESPNames or Config.Chams.ESPHealth or Config.Chams.ESPTracers) then
+        ClearESP(); return
+    end
+
+    local screenSize = Camera.ViewportSize
+    local originY = Config.Chams.TracerOriginTop and 0 or screenSize.Y
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            local head = plr.Character:FindFirstChild("Head")
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 0 and head and root then
+                local topPos, topOn = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.2, 0))
+                local bottomPos, bottomOn = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 1, 0))
+                if topOn and bottomOn then
+                    local container = ESPFolder:FindFirstChild(plr.Name) or CreateESPContainer(plr)
+                    local box = container:FindFirstChild("Box")
+                    local nameLabel = container:FindFirstChild("Name")
+                    local healthBack = container:FindFirstChild("HealthBack")
+                    local healthBar = healthBack and healthBack:FindFirstChild("HealthBar")
+                    local tracer = container:FindFirstChild("Tracer")
+
+                    local height = math.clamp(math.abs(bottomPos.Y - topPos.Y), 50, 300)
+                    local width = math.clamp(height / 2, 45, 160)
+                    local boxX = topPos.X - width / 2
+                    local boxY = topPos.Y
+
+                    box.Position = UDim2.new(0, boxX, 0, boxY)
+                    box.Size = UDim2.new(0, width, 0, height)
+                    box.UIStroke.Color = Config.Chams.Outline.Color
+                    box.Visible = Config.Chams.ESPBoxes
+
+                    nameLabel.Text = plr.Name
+                    nameLabel.Position = UDim2.new(0, boxX, 0, boxY - 18)
+                    nameLabel.Size = UDim2.new(0, width, 0, 18)
+                    nameLabel.Visible = Config.Chams.ESPNames
+
+                    if healthBack and healthBar then
+                        healthBack.Position = UDim2.new(0, boxX, 0, boxY + height + 4)
+                        healthBack.Size = UDim2.new(0, width, 0, 8)
+                        healthBack.Visible = Config.Chams.ESPHealth
+                        healthBar.Size = UDim2.new(math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1), 0, 1, 0)
+                        healthBar.BackgroundColor3 = hum.Health > hum.MaxHealth * 0.5 and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 100, 0)
+                    end
+
+                    if tracer then
+                        tracer.BackgroundColor3 = Config.Chams.Outline.Color
+                        tracer.Visible = Config.Chams.ESPTracers
+                        local tracerHeight = math.abs(topPos.Y - originY)
+                        tracer.Position = UDim2.new(0, topPos.X - 1, 0, math.min(originY, topPos.Y))
+                        tracer.Size = UDim2.new(0, 2, 0, tracerHeight)
+                    end
+                elseif ESPFolder:FindFirstChild(plr.Name) then
+                    ESPFolder:FindFirstChild(plr.Name):Destroy()
+                end
+            elseif ESPFolder:FindFirstChild(plr.Name) then
+                ESPFolder:FindFirstChild(plr.Name):Destroy()
+            end
+        end
+    end
+
+    for _, entry in ipairs(ESPFolder:GetChildren()) do
+        if not Players:FindFirstChild(entry.Name) then entry:Destroy() end
+    end
+end
+
+local FlyControl = {W = false, A = false, S = false, D = false, Space = false, Shift = false}
+local FlyVelocity, FlyGyro, FlyToggleSetter = nil, nil, nil
+
+local function UpdateFlyVelocity()
+    if not Config.Fly.Enabled then return end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    if not FlyVelocity or FlyVelocity.Parent ~= hrp then
+        if FlyVelocity then FlyVelocity:Destroy() end
+        FlyVelocity = Instance.new("BodyVelocity")
+        FlyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        FlyVelocity.P = 10000
+        FlyVelocity.Parent = hrp
+    end
+    if not FlyGyro or FlyGyro.Parent ~= hrp then
+        if FlyGyro then FlyGyro:Destroy() end
+        FlyGyro = Instance.new("BodyGyro")
+        FlyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+        FlyGyro.P = 3000
+        FlyGyro.Parent = hrp
+    end
+
+    local moveDirection = Vector3.new(
+        (FlyControl.D and 1 or 0) - (FlyControl.A and 1 or 0),
+        (FlyControl.Space and 1 or 0) - (FlyControl.Shift and 1 or 0),
+        (FlyControl.W and 1 or 0) - (FlyControl.S and 1 or 0)
+    )
+    if moveDirection.Magnitude > 0 then
+        moveDirection = moveDirection.Unit
+        local cam = Camera.CFrame
+        local velocity = (cam.LookVector * moveDirection.Z + cam.RightVector * moveDirection.X + Vector3.new(0, moveDirection.Y, 0)) * Config.Fly.Speed
+        FlyVelocity.Velocity = velocity
+    else
+        FlyVelocity.Velocity = Vector3.new(0, 0, 0)
+    end
+    FlyGyro.CFrame = CFrame.new(hrp.Position, hrp.Position + Camera.CFrame.LookVector)
+end
+
+local function IsAlivePart(part)
+    if not part or not part.Parent then return false end
+    local hum = part.Parent:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function GetActiveTarget()
+    if Config.SilentAim.Enabled then
+        return CurrentTarget
+    end
+    return AimbotTarget
+end
+
+local function UpdateAimbot()
+    if not Config.Running or not Config.Aimbot.Enabled then
+        AimbotTarget = nil
+        return
+    end
+    AimbotTarget = GetAimbotTarget()
+    if AimbotTarget and UserInputService:IsMouseButtonPressed(Config.Aimbot.Key) then
+        local targetPos = AimbotTarget.Position
+        local root = AimbotTarget.Parent and AimbotTarget.Parent:FindFirstChild("HumanoidRootPart")
+        if root then
+            targetPos = targetPos + (root.Velocity * Config.Aimbot.PredictionAmount)
+        end
+        local look = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+        Camera.CFrame = Camera.CFrame:Lerp(look, 1 / (math.max(0, Config.Aimbot.Smoothing) + 1))
+    end
+end
+
+local function SetupFOVDrawings()
+    if typeof(Drawing) ~= "table" then
+        DrawingAvailable = false
+        return
+    end
+    FOVInfoText = NewDrawing("Text")
+    if FOVInfoText then
+        FOVInfoText.Size = 16
+        FOVInfoText.Center = true
+        FOVInfoText.Outline = true
+        FOVInfoText.Visible = false
+        FOVInfoText.Font = 2
+    end
+    CrosshairDot = NewDrawing("Circle")
+    if CrosshairDot then
+        CrosshairDot.Filled = true
+        CrosshairDot.Visible = false
+        CrosshairDot.ZIndex = 105
+    end
+    for i = 1, 12 do
+        local line = NewDrawing("Line")
+        if line then
+            line.Visible = false
+            line.Thickness = Config.Crosshair.Width
+            line.Color = Config.Crosshair.Color
+            line.Transparency = 1 - Config.Crosshair.Trans
+            table.insert(CrosshairLines, line)
+        end
+    end
+    DrawingAvailable = FOVInfoText ~= nil or CrosshairDot ~= nil or #CrosshairLines > 0
+end
+
+local function UpdateCrosshair()
+    if not DrawingAvailable then return end
+    local mousePos = UserInputService:GetMouseLocation()
+    local mid = mousePos
+    if Config.Crosshair.FollowTarget then
+        local activeTarget = GetActiveTarget()
+        if activeTarget then
+            local p, onScreen = Camera:WorldToViewportPoint(activeTarget.Position)
+            if onScreen then mid = Vector2.new(p.X, p.Y) end
+        end
+    end
+    CrosshairDot.Visible = Config.Crosshair.Enabled and Config.Crosshair.CenterDot
+    if CrosshairDot.Visible then
+        CrosshairDot.Position = mid
+        CrosshairDot.Radius = Config.Crosshair.Width
+        CrosshairDot.Color = Config.Crosshair.Color
+        CrosshairDot.Transparency = 1 - Config.Crosshair.Trans
+    end
+    local stepSpeed = (Config.Crosshair.Spin ^ 2) / 400
+    CrosshairStep = CrosshairStep + stepSpeed
+    for i = 1, #CrosshairLines do
+        local line = CrosshairLines[i]
+        if i <= Config.Crosshair.Spokes and Config.Crosshair.Enabled then
+            local angle = ((i - 1) * (math.pi * 2 / Config.Crosshair.Spokes)) + CrosshairStep
+            local dir = Vector2.new(math.cos(angle), math.sin(angle))
+            line.Visible = true
+            line.From = mid + dir * Config.Crosshair.Gap
+            line.To = mid + dir * (Config.Crosshair.Gap + Config.Crosshair.Length)
+            line.Color = Config.Crosshair.Color
+            line.Thickness = Config.Crosshair.Width
+            line.Transparency = 1 - Config.Crosshair.Trans
+        else
+            line.Visible = false
+        end
+    end
+end
+
+local function RefreshFOVInfoText()
+    if not DrawingAvailable or not FOVInfoText then return end
+    local target = GetActiveTarget()
+    local parts = {}
+    if Config.Aimbot.ShowWeapon then
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            table.insert(parts, "Weapon: " .. tool.Name)
+        else
+            table.insert(parts, "Weapon: None")
+        end
+    end
+    if target and target.Parent then
+        local hum = target.Parent:FindFirstChildOfClass("Humanoid")
+        if Config.Aimbot.ShowName then
+            table.insert(parts, "Name: " .. target.Parent.Name)
+        end
+        if Config.Aimbot.ShowHealth and hum then
+            table.insert(parts, "HP: " .. math.floor(hum.Health))
+        end
+    end
+    if #parts == 0 then
+        FOVInfoText.Visible = false
+        return
+    end
+    local text = table.concat(parts, "\n")
+    FOVInfoText.Text = text
+    local mousePos = UserInputService:GetMouseLocation()
+    FOVInfoText.Position = mousePos + Vector2.new(0, Config.SilentAim.FOV + 18)
+    FOVInfoText.Color = Config.SilentAim.FOVColor
+    FOVInfoText.Transparency = 0
+    FOVInfoText.Visible = (Config.SilentAim.Enabled or Config.Aimbot.Enabled)
+end
+
+local FlyConnection = RunService.Heartbeat:Connect(function()
+    if Config.Running and Config.Fly.Enabled then
+        UpdateFlyVelocity()
+        return
+    end
+    if FlyVelocity then
+        FlyVelocity:Destroy()
+        FlyVelocity = nil
+    end
+    if FlyGyro then
+        FlyGyro:Destroy()
+        FlyGyro = nil
+    end
+end)
+
+local ESPConnection = RunService.RenderStepped:Connect(UpdateESP)
+
+-- // 7. NAMECALL HOOK
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if Config.Running and not checkcaller() and method == "FireServer" and self.Name == "ShootBullet" then
+        if Config.SilentAim.Enabled and CurrentTarget then
+            local origin = Camera.CFrame.Position
+            local targetPos = CurrentTarget.Position
+            local dir = (targetPos - origin).Unit
+            if dir.Magnitude > 0 then
+                args[1] = vector and vector.create and vector.create(dir.X, dir.Y, dir.Z) or Vector3.new(dir.X, dir.Y, dir.Z)
+            end
+            return oldNamecall(self, unpack(args))
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+-- // 8. UI SETUP
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local MainCorner = Instance.new("UICorner")
+local TitleBar = Instance.new("Frame")
+local TabHolder = Instance.new("Frame")
+local ControlButtons = Instance.new("Frame")
+local CloseBtn = Instance.new("TextButton")
+local CloseIcon = Instance.new("ImageLabel")
+local MaxBtn = Instance.new("TextButton")
+local MinBtn = Instance.new("TextButton")
+local ContentArea = Instance.new("Frame")
+local ReopenBox = Instance.new("ImageButton")
+
+local function GetExecutorName()
+    local name = "Executor"
+    if identifyexecutor then
+        local n, _ = identifyexecutor(); name = n or "Executor"
+    elseif getexecutorname then
+        name = getexecutorname() or "Executor"
+    end
+    return name:gsub("%s+", "")
+end
+
+local executorName = GetExecutorName()
+local workspacePath = "C:\\User\\AppData\\Local\\" .. executorName .. "\\workspace\\sexware.balls"
+
+local EXTENSIONS = {".txt", ".lua", ".json", ".cs", ".cpp", ".py", ".bat"}
+local function GetRandomExt() return EXTENSIONS[math.random(1, #EXTENSIONS)] end
+
+local COLORS = {
+    TERMINAL_BG = Color3.fromRGB(0, 0, 0),
+    FRAME_GRAY = Color3.fromRGB(35, 35, 35),
+    TAB_INACTIVE = Color3.fromRGB(35, 35, 35),
+    TAB_HOVER = Color3.fromRGB(18, 18, 18),
+    TAB_ACTIVE = Color3.fromRGB(0, 0, 0),
+    TEXT_MAIN = Color3.fromRGB(192, 192, 192),
+    CLOSE_HOVER = Color3.fromRGB(232, 17, 35),
+    CONTROL_HOVER = Color3.fromRGB(60, 60, 60),
+    LOG_BG = Color3.fromRGB(5, 5, 5)
+}
+
+local TARGET_X_ID = "rbxthumb://type=Asset&id=107241850631933&w=150&h=150"
+
+ScreenGui.Name = "Terminal_Aesthetic_Fixed"
+ScreenGui.Parent = CoreGui
+ScreenGui.DisplayOrder = 999
+ScreenGui.IgnoreGuiInset = true
+
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = COLORS.TERMINAL_BG
+MainFrame.Position = UDim2.new(0.5, -540, 0.5, -380)
+MainFrame.Size = UDim2.new(0, 1080, 0, 760)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Visible = true
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Color3.fromRGB(90, 90, 90)
+MainStroke.Thickness = 1
+MainStroke.Transparency = 0
+MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainFrame
+
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.BackgroundColor3 = COLORS.FRAME_GRAY
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BorderSizePixel = 0
+TitleBar.Active = true
+local TitleCorner = Instance.new("UICorner", TitleBar)
+TitleCorner.CornerRadius = UDim.new(0, 8)
+local TitleBottomMask = Instance.new("Frame", TitleBar)
+TitleBottomMask.BackgroundColor3 = COLORS.FRAME_GRAY
+TitleBottomMask.BorderSizePixel = 0
+TitleBottomMask.Position = UDim2.new(0, 0, 1, -8)
+TitleBottomMask.Size = UDim2.new(1, 0, 0, 8)
+TitleBottomMask.ZIndex = 1
+
+-- // Log system
+local LogContainer = Instance.new("Frame", MainFrame)
+LogContainer.Size = UDim2.new(1, -40, 0, 100)
+LogContainer.Position = UDim2.new(0, 20, 1, -120)
+LogContainer.BackgroundTransparency = 1
+local LogList = Instance.new("UIListLayout", LogContainer)
+LogList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+
+local function Notify(msg)
+    local lbl = Instance.new("TextLabel", LogContainer)
+    lbl.Size = UDim2.new(1, 0, 0, 20)
+    lbl.BackgroundColor3 = COLORS.LOG_BG
+    lbl.BorderSizePixel = 0
+    lbl.Font = Enum.Font.Code
+    lbl.TextColor3 = COLORS.TEXT_MAIN
+    lbl.TextSize = 14
+    lbl.Text = " [LOG] " .. msg
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    task.delay(1, function() lbl:Destroy() end)
+end
+
+-- // Reopen box
+ReopenBox.Name = "ReopenBox"
+ReopenBox.Parent = ScreenGui
+ReopenBox.BackgroundColor3 = COLORS.FRAME_GRAY
+ReopenBox.BorderSizePixel = 0
+ReopenBox.Position = UDim2.new(0, 5, 0.5, -20)
+ReopenBox.Size = UDim2.new(0, 40, 0, 40)
+ReopenBox.Image = "rbxassetid://53675326"
+ReopenBox.Visible = false
+ReopenBox.ZIndex = 1000
+Instance.new("UICorner", ReopenBox).CornerRadius = UDim.new(0, 4)
+
+-- // Control buttons
+ControlButtons.Name = "ControlButtons"
+ControlButtons.Parent = TitleBar
+ControlButtons.BackgroundTransparency = 1
+ControlButtons.Position = UDim2.new(1, -138, 0, 0)
+ControlButtons.Size = UDim2.new(0, 138, 1, 0)
+ControlButtons.ZIndex = 10
+
+local function SetupControl(btn, symbol, pos, isClose)
+    btn.Parent = ControlButtons
+    btn.BackgroundTransparency = 1
+    btn.BorderSizePixel = 0
+    btn.Position = UDim2.new(pos, 0, 0, 0)
+    btn.Size = UDim2.new(0, 46, 1, 0)
+    btn.Font = Enum.Font.Arial
+    btn.Text = isClose and "" or symbol
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 16
+    btn.ZIndex = 20
+    btn.AutoButtonColor = false
+    if isClose then
+        local bgFrame = Instance.new("Frame", btn)
+        bgFrame.Name = "CloseBG"
+        bgFrame.Position = UDim2.new(0, 0, 0, 0)
+        bgFrame.Size = UDim2.new(1, 1, 1, 0)
+        bgFrame.BackgroundColor3 = COLORS.CLOSE_HOVER
+        bgFrame.BorderSizePixel = 0
+        bgFrame.ZIndex = 15
+        bgFrame.Visible = false
+        local c = Instance.new("UICorner", bgFrame); c.CornerRadius = UDim.new(0, 8)
+        local bm = Instance.new("Frame", bgFrame)
+        bm.Size = UDim2.new(1, 0, 0, 10); bm.Position = UDim2.new(0, 0, 1, -10)
+        bm.BackgroundColor3 = COLORS.CLOSE_HOVER; bm.BorderSizePixel = 0; bm.ZIndex = 16
+        local lm = Instance.new("Frame", bgFrame)
+        lm.Size = UDim2.new(0, 10, 1, 0); lm.BackgroundColor3 = COLORS.CLOSE_HOVER
+        lm.BorderSizePixel = 0; lm.ZIndex = 16
+        CloseIcon.Parent = btn
+        CloseIcon.BackgroundTransparency = 1
+        CloseIcon.Position = UDim2.new(0.5, -8, 0.5, -8)
+        CloseIcon.Size = UDim2.new(0, 16, 0, 16)
+        CloseIcon.Image = TARGET_X_ID
+        CloseIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+        CloseIcon.ScaleType = Enum.ScaleType.Fit
+        CloseIcon.ZIndex = 25
+        btn.MouseEnter:Connect(function() bgFrame.Visible = true end)
+        btn.MouseLeave:Connect(function() bgFrame.Visible = false end)
+    else
+        btn.MouseEnter:Connect(function()
+            btn.BackgroundTransparency = 0
+            btn.BackgroundColor3 = COLORS.CONTROL_HOVER
+        end)
+        btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 1 end)
+    end
+end
+
+SetupControl(MinBtn, "—", 0, false)
+SetupControl(MaxBtn, "□", 0.33, false)
+SetupControl(CloseBtn, "✕", 0.66, true)
+
+-- // [CHANGED] Close button now fully unloads instead of just destroying ScreenGui
+-- // This is handled at the bottom after UnloadAll is defined
+
+TabHolder.Name = "TabHolder"
+TabHolder.Parent = TitleBar
+TabHolder.BackgroundTransparency = 1
+TabHolder.Position = UDim2.new(0, 8, 0, 4)
+TabHolder.Size = UDim2.new(0.6, 0, 1, -4)
+TabHolder.ZIndex = 5
+local TabListLayout = Instance.new("UIListLayout", TabHolder)
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+TabListLayout.Padding = UDim.new(0, 4)
+
+ContentArea.Name = "ContentArea"
+ContentArea.Parent = MainFrame
+ContentArea.BackgroundTransparency = 1
+ContentArea.Position = UDim2.new(0, 20, 0, 50)
+ContentArea.Size = UDim2.new(1, -40, 1, -70)
+
+local PathDisplay = Instance.new("TextLabel", ContentArea)
+PathDisplay.BackgroundTransparency = 1
+PathDisplay.Size = UDim2.new(1, 0, 0, 20)
+PathDisplay.Font = Enum.Font.Code
+PathDisplay.Text = workspacePath .. ">"
+PathDisplay.TextColor3 = COLORS.TEXT_MAIN
+PathDisplay.TextSize = 16
+PathDisplay.TextXAlignment = Enum.TextXAlignment.Left
+
+local TabPages = {}
+local function CreateTab(name, isDefault)
+    local TabBtn = Instance.new("TextButton", TabHolder)
+    TabBtn.BackgroundColor3 = isDefault and COLORS.TAB_ACTIVE or COLORS.TAB_INACTIVE
+    TabBtn.Size = UDim2.new(0, 170, 1, 0)
+    TabBtn.Font = Enum.Font.Code
+    TabBtn.Text = "  " .. name
+    TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TabBtn.TextSize = 13
+    TabBtn.TextXAlignment = Enum.TextXAlignment.Left
+    TabBtn.AutoButtonColor = false
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 4)
+    local DX = Instance.new("ImageLabel", TabBtn)
+    DX.BackgroundTransparency = 1
+    DX.Position = UDim2.new(1, -25, 0.5, -6)
+    DX.Size = UDim2.new(0, 12, 0, 12)
+    DX.Image = TARGET_X_ID
+    DX.ImageColor3 = Color3.fromRGB(150, 150, 150)
+    DX.ScaleType = Enum.ScaleType.Fit
+    DX.ZIndex = 5
+    local tabMask = Instance.new("Frame", TabBtn)
+    tabMask.Size = UDim2.new(1, 0, 0, 4)
+    tabMask.Position = UDim2.new(0, 0, 1, -4)
+    tabMask.BackgroundColor3 = TabBtn.BackgroundColor3
+    tabMask.BorderSizePixel = 0
+    tabMask.ZIndex = 1
+    TabBtn:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+        tabMask.BackgroundColor3 = TabBtn.BackgroundColor3
+    end)
+    TabBtn.MouseEnter:Connect(function()
+        if not (TabPages[name] and TabPages[name].Page.Visible) then
+            TabBtn.BackgroundColor3 = COLORS.TAB_HOVER
+        end
+    end)
+    TabBtn.MouseLeave:Connect(function()
+        if not (TabPages[name] and TabPages[name].Page.Visible) then
+            TabBtn.BackgroundColor3 = COLORS.TAB_INACTIVE
+        end
+    end)
+    local Page = Instance.new("ScrollingFrame", ContentArea)
+    Page.BackgroundTransparency = 1
+    Page.Position = UDim2.new(0, 0, 0, 25)
+    Page.Size = UDim2.new(1, 0, 1, -25)
+    Page.Visible = isDefault
+    Page.ScrollBarThickness = 0
+    Page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    local l = Instance.new("UIListLayout", Page)
+    l.Padding = UDim.new(0, 5)
+    l.VerticalAlignment = Enum.VerticalAlignment.Top
+    TabBtn.MouseButton1Click:Connect(function()
+        for _, t in pairs(TabPages) do
+            t.Page.Visible = false
+            t.Btn.BackgroundColor3 = COLORS.TAB_INACTIVE
+        end
+        Page.Visible = true
+        TabBtn.BackgroundColor3 = COLORS.TAB_ACTIVE
+        PathDisplay.Text = workspacePath .. "\\" .. name .. ">"
+    end)
+    TabPages[name] = {Btn = TabBtn, Page = Page}
+    if isDefault then PathDisplay.Text = workspacePath .. "\\" .. name .. ">" end
+    return Page
+end
+
+-- // Toggle component
+local function AddToggle(parent, tabName, feature, callback, widthScale)
+    local state = false
+    local ext = GetRandomExt()
+    local Btn = Instance.new("TextButton", parent)
+    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(widthScale or 1, 0, 0, 25)
+    Btn.Font = Enum.Font.Code
+    Btn.TextColor3 = COLORS.TEXT_MAIN
+    Btn.TextSize = 16
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    local StatusLabel = Instance.new("TextLabel", Btn)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Position = UDim2.new(0, 0, 0, 0)
+    StatusLabel.Size = UDim2.new(1, 0, 1, 0)
+    StatusLabel.Font = Enum.Font.Code
+    StatusLabel.TextSize = 16
+    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local function Refresh()
+        local base = string.format("%s%s - ", feature, ext)
+        Btn.Text = base
+        StatusLabel.Text = string.rep(" ", #base) .. (state and "on" or "off")
+        StatusLabel.TextColor3 = state and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    end
+    local function ForceSet(v) state = v; Refresh() end
+    Btn.MouseButton1Click:Connect(function()
+        state = not state; Refresh()
+        Notify(feature .. " set to " .. (state and "ENABLED" or "DISABLED"))
+        callback(state)
+    end)
+    Refresh()
+    if parent:IsA("ScrollingFrame") and parent.UIListLayout then
+        parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y)
+    end
+    return ForceSet
+end
+
+local function AddCycleToggle(parent, feature, options, startIndex, callback)
+    local idx = startIndex or 1
+    local ext = GetRandomExt()
+    local Btn = Instance.new("TextButton", parent)
+    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(1, 0, 0, 25)
+    Btn.Font = Enum.Font.Code
+    Btn.TextColor3 = COLORS.TEXT_MAIN
+    Btn.TextSize = 16
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    Btn.AutoButtonColor = false
+    local StatusLabel = Instance.new("TextLabel", Btn)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Position = UDim2.new(0, 0, 0, 0)
+    StatusLabel.Size = UDim2.new(1, 0, 1, 0)
+    StatusLabel.Font = Enum.Font.Code
+    StatusLabel.TextSize = 16
+    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local function Refresh()
+        local base = string.format("%s%s - ", feature, ext)
+        Btn.Text = base
+        StatusLabel.Text = string.rep(" ", #base) .. options[idx]
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+    Btn.MouseButton1Click:Connect(function()
+        idx = idx % #options + 1
+        Refresh()
+        if callback then callback(options[idx]) end
+    end)
+    Refresh()
+    if parent:IsA("ScrollingFrame") and parent.UIListLayout then
+        parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y)
+    end
+    return function(value)
+        for i, option in ipairs(options) do
+            if option == value then idx = i; break end
+        end
+        Refresh()
+    end
+end
+
+local function AddSpacer(parent, height)
+    local spacer = Instance.new("Frame", parent)
+    spacer.BackgroundTransparency = 1
+    spacer.Size = UDim2.new(1, 0, 0, height or 10)
+    return spacer
+end
+
+-- // Slider component (original dash-bracket style)
+local function AddSlider(parent, tabName, feature, min, max, default, callback)
+    local val = default
+    local ext = GetRandomExt()
+    local Btn = Instance.new("TextButton", parent)
+    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(1, 0, 0, 25)
+    Btn.Font = Enum.Font.Code
+    Btn.TextColor3 = COLORS.TEXT_MAIN
+    Btn.TextSize = 16
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    local function UpdateSlider()
+        local pct = math.clamp((val - min) / (max - min), 0, 1)
+        local dc = math.floor(pct * 30)
+        local bar = "[" .. string.rep("-", dc) .. string.rep(" ", 30 - dc) .. "]"
+        Btn.Text = string.format("%s%s %s %d (%d%%)", feature, ext, bar, val, (val / max) * 100)
+    end
+    local function ForceVal(v) val = v; UpdateSlider() end
+    local dragging = false
+    local function GetBounds()
+        local prefix = feature .. ext .. " "
+        local ps = TextService:GetTextSize(prefix, Btn.TextSize, Btn.Font, Vector2.new(math.huge, math.huge))
+        local bs = TextService:GetTextSize("[------------------------------]", Btn.TextSize, Btn.Font, Vector2.new(math.huge, math.huge))
+        return Btn.AbsolutePosition.X + ps.X, Btn.AbsolutePosition.X + ps.X + bs.X
+    end
+    local function HandleInput()
+        local mx = UserInputService:GetMouseLocation().X
+        local bS, bE = GetBounds()
+        local rel = math.clamp((mx - bS) / (bE - bS), 0, 1)
+        val = math.clamp(math.floor(min + (max - min) * rel + 0.5), min, max)
+        UpdateSlider(); callback(val)
+    end
+    Btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mx = UserInputService:GetMouseLocation().X
+            local bS, bE = GetBounds()
+            if mx >= bS and mx <= bE then dragging = true; HandleInput() end
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and dragging then
+            dragging = false; Notify(feature .. " updated to " .. val)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then HandleInput() end
+    end)
+    UpdateSlider()
+    parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y)
+    return ForceVal
+end
+
+local RecoilSpreadCache = {}
+local FireRateCache = {}
+
+local function ApplyRecoilSpreadTag(o)
+    if o:GetAttribute("Recoil") then
+        local data = RecoilSpreadCache[o] or {}
+        if data.Recoil == nil then data.Recoil = o:GetAttribute("Recoil") end
+        o:SetAttribute("Recoil", 0)
+        if data.Spread == nil and o:GetAttribute("Spread") then data.Spread = o:GetAttribute("Spread") end
+        if o:GetAttribute("Spread") then o:SetAttribute("Spread", 0) end
+        RecoilSpreadCache[o] = data
+    elseif o:GetAttribute("Spread") then
+        local data = RecoilSpreadCache[o] or {}
+        if data.Spread == nil then data.Spread = o:GetAttribute("Spread") end
+        o:SetAttribute("Spread", 0)
+        RecoilSpreadCache[o] = data
+    end
+end
+
+local function RestoreRecoilSpread(o)
+    local data = RecoilSpreadCache[o]
+    if not data then return end
+    if data.Recoil then o:SetAttribute("Recoil", data.Recoil) end
+    if data.Spread then o:SetAttribute("Spread", data.Spread) end
+    RecoilSpreadCache[o] = nil
+end
+
+local function ApplyFireRateTag(o)
+    if o:GetAttribute("FireRate") then
+        if FireRateCache[o] == nil then
+            FireRateCache[o] = o:GetAttribute("FireRate")
+        end
+        o:SetAttribute("FireRate", FireRateCache[o] * 1.25)
+    end
+end
+
+local function RestoreFireRate(o)
+    if FireRateCache[o] and o:GetAttribute("FireRate") then
+        o:SetAttribute("FireRate", FireRateCache[o])
+        FireRateCache[o] = nil
+    end
+end
+
+local function RefreshCombatAttributes()
+    for _, o in pairs(LocalPlayer:GetDescendants()) do
+        if Config.Combat.RecoilSpread then
+            ApplyRecoilSpreadTag(o)
+        else
+            RestoreRecoilSpread(o)
+        end
+        if Config.Combat.FireRate then
+            ApplyFireRateTag(o)
+        else
+            RestoreFireRate(o)
+        end
+    end
+end
+
+LocalPlayer.DescendantAdded:Connect(function(o)
+    if Config.Combat.RecoilSpread then ApplyRecoilSpreadTag(o) end
+    if Config.Combat.FireRate then ApplyFireRateTag(o) end
+end)
+
+-- // Transparency slider (dash-bracket, 100% = fully visible, 0% = invisible)
+-- // Internally stored as 0-1 where 1 = fully visible
+local function AddTransSlider(parent, label, targetTable, transKey)
+    local val = math.floor(targetTable[transKey] * 100)
+    local ext = GetRandomExt()
+    local Btn = Instance.new("TextButton", parent)
+    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(1, 0, 0, 25)
+    Btn.Font = Enum.Font.Code
+    Btn.TextColor3 = COLORS.TEXT_MAIN
+    Btn.TextSize = 16
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    Btn.AutoButtonColor = false
+    local function UpdateSlider()
+        local pct = val / 100
+        local dc = math.floor(pct * 30)
+        local bar = "[" .. string.rep("-", dc) .. string.rep(" ", 30 - dc) .. "]"
+        Btn.Text = string.format("%s%s %s %d%%", label, ext, bar, val)
+        -- // 100% visible = 1 internally
+        targetTable[transKey] = val / 100
+    end
+    local function ForceVal(v) val = math.floor(v * 100); UpdateSlider() end
+    local dragging = false
+    local function GetBounds()
+        local prefix = label .. ext .. " "
+        local ps = TextService:GetTextSize(prefix, Btn.TextSize, Btn.Font, Vector2.new(math.huge, math.huge))
+        local bs = TextService:GetTextSize("[------------------------------]", Btn.TextSize, Btn.Font, Vector2.new(math.huge, math.huge))
+        return Btn.AbsolutePosition.X + ps.X, Btn.AbsolutePosition.X + ps.X + bs.X
+    end
+    local function HandleInput()
+        local mx = UserInputService:GetMouseLocation().X
+        local bS, bE = GetBounds()
+        val = math.floor(math.clamp((mx - bS) / (bE - bS), 0, 1) * 100)
+        UpdateSlider()
+    end
+    Btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mx = UserInputService:GetMouseLocation().X
+            local bS, bE = GetBounds()
+            if mx >= bS and mx <= bE then dragging = true; HandleInput() end
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and dragging then
+            dragging = false; Notify(label .. " opacity set to " .. val .. "%")
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then HandleInput() end
+    end)
+    UpdateSlider()
+    parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y)
+    return ForceVal
+end
+
+-- // [ADDED] CMD-themed color picker popup
+-- // Features: R/G/B dash sliders with colored dashes, rainbow toggle,
+-- // live preview circle, thin outline on window, colored X with red hover,
+-- // preview circle shows pending color before it applies live
+local ActiveColorPicker = nil
+local ColorPickerInputChangedConn, ColorPickerInputEndedConn = nil, nil
+
+local function CloseColorPicker()
+    if ColorPickerInputChangedConn then ColorPickerInputChangedConn:Disconnect(); ColorPickerInputChangedConn = nil end
+    if ColorPickerInputEndedConn then ColorPickerInputEndedConn:Disconnect(); ColorPickerInputEndedConn = nil end
+    if ActiveColorPicker then
+        ActiveColorPicker:Destroy()
+        ActiveColorPicker = nil
+    end
+end
+
+local function OpenColorPicker(label, colorTable, colorKey, onChanged)
+    if ActiveColorPicker then CloseColorPicker() end
+
+    local PickerFrame = Instance.new("Frame", ScreenGui)
+    PickerFrame.Name = "ColorPicker_" .. label
+    PickerFrame.BackgroundColor3 = COLORS.TERMINAL_BG
+    PickerFrame.BorderSizePixel = 0
+    PickerFrame.Size = UDim2.new(0, 520, 0, 260)
+    PickerFrame.Position = UDim2.new(0.5, -260, 0.5, -130)
+    PickerFrame.ZIndex = 2000
+    PickerFrame.Active = true
+    Instance.new("UICorner", PickerFrame).CornerRadius = UDim.new(0, 6)
+    -- // [ADDED] Thin visible outline
+    local PickerStroke = Instance.new("UIStroke", PickerFrame)
+    PickerStroke.Color = Color3.fromRGB(100, 100, 100)
+    PickerStroke.Thickness = 1
+    ActiveColorPicker = PickerFrame
+
+    -- // Title bar
+    local PT = Instance.new("Frame", PickerFrame)
+    PT.BackgroundColor3 = COLORS.FRAME_GRAY
+    PT.Size = UDim2.new(1, 0, 0, 28)
+    PT.BorderSizePixel = 0
+    PT.ZIndex = 2001
+    Instance.new("UICorner", PT).CornerRadius = UDim.new(0, 6)
+    local PTMask = Instance.new("Frame", PT)
+    PTMask.Size = UDim2.new(1, 0, 0, 6)
+    PTMask.Position = UDim2.new(0, 0, 1, -6)
+    PTMask.BackgroundColor3 = COLORS.FRAME_GRAY
+    PTMask.BorderSizePixel = 0
+    PTMask.ZIndex = 2001
+
+    local PTLabel = Instance.new("TextLabel", PT)
+    PTLabel.BackgroundTransparency = 1
+    PTLabel.Size = UDim2.new(1, -35, 1, 0)
+    PTLabel.Position = UDim2.new(0, 8, 0, 0)
+    PTLabel.Font = Enum.Font.Code
+    PTLabel.TextSize = 13
+    PTLabel.TextColor3 = COLORS.TEXT_MAIN
+    PTLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PTLabel.Text = "> color_picker.exe -- " .. label
+    PTLabel.ZIndex = 2002
+
+    -- // [ADDED] Close X with red hover background, matching main close button style
+    local PClose = Instance.new("TextButton", PT)
+    PClose.BackgroundTransparency = 1
+    PClose.Size = UDim2.new(0, 30, 1, 0)
+    PClose.Position = UDim2.new(1, -30, 0, 0)
+    PClose.Font = Enum.Font.Code
+    PClose.Text = ""
+    PClose.TextSize = 13
+    PClose.ZIndex = 2010
+    PClose.AutoButtonColor = false
+
+    local PCloseBG = Instance.new("Frame", PClose)
+    PCloseBG.BackgroundColor3 = COLORS.CLOSE_HOVER
+    PCloseBG.BorderSizePixel = 0
+    PCloseBG.Size = UDim2.new(1, 0, 1, 0)
+    PCloseBG.ZIndex = 2009
+    PCloseBG.Visible = false
+    Instance.new("UICorner", PCloseBG).CornerRadius = UDim.new(0, 4)
+
+    local PCloseIcon = Instance.new("ImageLabel", PClose)
+    PCloseIcon.BackgroundTransparency = 1
+    PCloseIcon.Position = UDim2.new(0.5, -7, 0.5, -7)
+    PCloseIcon.Size = UDim2.new(0, 14, 0, 14)
+    PCloseIcon.Image = TARGET_X_ID
+    PCloseIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    PCloseIcon.ScaleType = Enum.ScaleType.Fit
+    PCloseIcon.ZIndex = 2011
+
+    PClose.MouseEnter:Connect(function() PCloseBG.Visible = true end)
+    PClose.MouseLeave:Connect(function() PCloseBG.Visible = false end)
+    PClose.MouseButton1Click:Connect(function()
+        CloseColorPicker()
+    end)
+
+    -- // Picker drag
+    local pDrag, pDragStart, pStartPos
+    PT.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            pDrag = true; pDragStart = input.Position; pStartPos = PickerFrame.Position
+        end
+    end)
+    ColorPickerInputChangedConn = UserInputService.InputChanged:Connect(function(input)
+        if pDrag and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = input.Position - pDragStart
+            PickerFrame.Position = UDim2.new(pStartPos.X.Scale, pStartPos.X.Offset + d.X, pStartPos.Y.Scale, pStartPos.Y.Offset + d.Y)
+        end
+    end)
+    ColorPickerInputEndedConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then pDrag = false end
+    end)
+
+    -- // Content
+    local PC = Instance.new("Frame", PickerFrame)
+    PC.BackgroundTransparency = 1
+    PC.Position = UDim2.new(0, 10, 0, 35)
+    PC.Size = UDim2.new(1, -20, 1, -45)
+    PC.ZIndex = 2002
+
+    local PCList = Instance.new("UIListLayout", PC)
+    PCList.Padding = UDim.new(0, 5)
+
+    -- // Current color values
+    local r = math.floor(colorTable[colorKey].R * 255)
+    local g = math.floor(colorTable[colorKey].G * 255)
+    local b = math.floor(colorTable[colorKey].B * 255)
+    local rainbowEnabled = false
+    local rainbowConn = nil
+
+    -- // [ADDED] Preview circle — shows pending colour before applying
+    -- // Sits to the right of the sliders, outside the list layout
+    local PreviewCircle = Instance.new("Frame", PickerFrame)
+    PreviewCircle.Size = UDim2.new(0, 42, 0, 42)
+    PreviewCircle.Position = UDim2.new(1, -58, 0, 35)
+    PreviewCircle.BackgroundColor3 = colorTable[colorKey]
+    PreviewCircle.BorderSizePixel = 0
+    PreviewCircle.ZIndex = 2010
+    Instance.new("UICorner", PreviewCircle).CornerRadius = UDim.new(1, 0)
+    local PreviewStroke = Instance.new("UIStroke", PreviewCircle)
+    PreviewStroke.Color = Color3.fromRGB(100, 100, 100)
+    PreviewStroke.Thickness = 1
+
+    -- // Hex line
+    local HexLine = Instance.new("TextLabel", PC)
+    HexLine.BackgroundTransparency = 1
+    HexLine.Size = UDim2.new(1, -50, 0, 18)
+    HexLine.Font = Enum.Font.Code
+    HexLine.TextSize = 14
+    HexLine.TextColor3 = COLORS.TEXT_MAIN
+    HexLine.TextXAlignment = Enum.TextXAlignment.Left
+    HexLine.ZIndex = 2003
+
+    local function RefreshAll()
+        local hex = string.format("#%02X%02X%02X", r, g, b)
+        HexLine.Text = string.format("hex: %s   rgb(%d, %d, %d)", hex, r, g, b)
+        local col = Color3.fromRGB(r, g, b)
+        PreviewCircle.BackgroundColor3 = col
+        colorTable[colorKey] = col
+        if onChanged then onChanged(col) end
+    end
+
+    -- // R G B dash-bracket sliders with colored dashes
+    local channels = {
+        {lbl = "R", getV = function() return r end, setV = function(v) r = v end, dashColor = Color3.fromRGB(220, 60, 60)},
+        {lbl = "G", getV = function() return g end, setV = function(v) g = v end, dashColor = Color3.fromRGB(60, 200, 60)},
+        {lbl = "B", getV = function() return b end, setV = function(v) b = v end, dashColor = Color3.fromRGB(60, 120, 220)},
+    }
+
+    for _, ch in ipairs(channels) do
+        -- // Each channel row uses RichText to color the dashes
+        local Row = Instance.new("TextButton", PC)
+        Row.BackgroundTransparency = 1
+        Row.Size = UDim2.new(1, -50, 0, 22)
+        Row.Font = Enum.Font.Code
+        Row.TextSize = 15
+        Row.TextColor3 = COLORS.TEXT_MAIN
+        Row.TextXAlignment = Enum.TextXAlignment.Left
+        Row.AutoButtonColor = false
+        Row.RichText = true
+        Row.ZIndex = 2003
+
+        local hexDash = string.format("#%02X%02X%02X", 
+            math.floor(ch.dashColor.R * 255), 
+            math.floor(ch.dashColor.G * 255), 
+            math.floor(ch.dashColor.B * 255))
+
+        local function UpdateRow()
+            local v = ch.getV()
+            local pct = v / 255
+            local dc = math.floor(pct * 20)
+            -- // Colored dashes via RichText font tag
+            local coloredDashes = string.format('<font color="%s">%s</font>', hexDash, string.rep("-", dc))
+            local emptySpaces = string.rep(" ", 20 - dc)
+            local bar = "[" .. coloredDashes .. emptySpaces .. "]"
+            Row.Text = string.format('%s.exe %s %d (%d%%)', ch.lbl, bar, v, math.floor(pct * 100))
+        end
+
+        local rowDragging = false
+        local function GetRowBounds()
+            local prefix = ch.lbl .. ".exe "
+            local ps = TextService:GetTextSize(prefix, 15, Enum.Font.Code, Vector2.new(math.huge, math.huge))
+            local bs = TextService:GetTextSize("[--------------------]", 15, Enum.Font.Code, Vector2.new(math.huge, math.huge))
+            return Row.AbsolutePosition.X + ps.X, Row.AbsolutePosition.X + ps.X + bs.X
+        end
+        local function HandleRow()
+            local mx = UserInputService:GetMouseLocation().X
+            local bS, bE = GetRowBounds()
+            ch.setV(math.floor(math.clamp((mx - bS) / (bE - bS), 0, 1) * 255))
+            UpdateRow(); RefreshAll()
+        end
+        Row.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mx = UserInputService:GetMouseLocation().X
+                local bS, bE = GetRowBounds()
+                if mx >= bS and mx <= bE then rowDragging = true; HandleRow() end
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 and rowDragging then
+                rowDragging = false; Notify(label .. " " .. ch.lbl .. " = " .. ch.getV())
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if rowDragging and input.UserInputType == Enum.UserInputType.MouseMovement then HandleRow() end
+        end)
+        UpdateRow()
+    end
+
+    -- // [ADDED] Rainbow toggle — same dash-bracket text style as main toggles
+    local rbState = false
+    local RbBtn = Instance.new("TextButton", PC)
+    RbBtn.BackgroundTransparency = 1
+    RbBtn.Size = UDim2.new(1, -50, 0, 22)
+    RbBtn.Font = Enum.Font.Code
+    RbBtn.TextSize = 15
+    RbBtn.TextColor3 = COLORS.TEXT_MAIN
+    RbBtn.TextXAlignment = Enum.TextXAlignment.Left
+    RbBtn.AutoButtonColor = false
+    RbBtn.ZIndex = 2003
+
+    local RbStatus = Instance.new("TextLabel", RbBtn)
+    RbStatus.BackgroundTransparency = 1
+    RbStatus.Size = UDim2.new(1, 0, 1, 0)
+    RbStatus.Font = Enum.Font.Code
+    RbStatus.TextSize = 15
+    RbStatus.TextXAlignment = Enum.TextXAlignment.Left
+    RbStatus.ZIndex = 2004
+
+    local function RefreshRb()
+        local base = "rainbow.exe - "
+        RbBtn.Text = base
+        RbStatus.Text = string.rep(" ", #base) .. (rbState and "on" or "off")
+        RbStatus.TextColor3 = rbState and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    end
+
+    RbBtn.MouseButton1Click:Connect(function()
+        rbState = not rbState
+        RefreshRb()
+        if rbState then
+            -- // Rainbow loop updates color continuously while enabled
+            rainbowConn = RunService.RenderStepped:Connect(function()
+                if not rbState then return end
+                local hue = tick() % 5 / 5
+                local col = Color3.fromHSV(hue, 1, 1)
+                r = math.floor(col.R * 255)
+                g = math.floor(col.G * 255)
+                b = math.floor(col.B * 255)
+                PreviewCircle.BackgroundColor3 = col
+                colorTable[colorKey] = col
+                if onChanged then onChanged(col) end
+                local hex = string.format("#%02X%02X%02X", r, g, b)
+                HexLine.Text = string.format("hex: %s   rgb(%d, %d, %d)", hex, r, g, b)
+            end)
+        else
+            if rainbowConn then rainbowConn:Disconnect(); rainbowConn = nil end
+            RefreshAll()
+        end
+    end)
+    RefreshRb()
+
+    RefreshAll()
+    PC.CanvasSize = UDim2.new(0, 0, 0, PCList.AbsoluteContentSize.Y)
+end
+
+-- // Color row button (cmd-styled, hex inline, opens picker on click)
+local function AddColorRow(parent, label, colorTable, colorKey, onChanged)
+    local ext = GetRandomExt()
+    local Btn = Instance.new("TextButton", parent)
+    Btn.BackgroundTransparency = 1
+    Btn.Size = UDim2.new(1, 0, 0, 25)
+    Btn.Font = Enum.Font.Code
+    Btn.TextColor3 = COLORS.TEXT_MAIN
+    Btn.TextSize = 16
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    Btn.AutoButtonColor = false
+    local function RefreshLabel()
+        local c = colorTable[colorKey]
+        local hex = string.format("#%02X%02X%02X", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
+        Btn.Text = string.format("%s%s > set_color [%s] [edit]", label, ext, hex)
+    end
+    Btn.MouseButton1Click:Connect(function()
+        Notify("opening color_picker for " .. label)
+        OpenColorPicker(label, colorTable, colorKey, function(col)
+            RefreshLabel()
+            if onChanged then onChanged(col) end
+        end)
+    end)
+    RefreshLabel()
+    parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y)
+end
+
+-- // [ADDED] WORLD helpers and effects
+local WorldTextureCache = {}
+local FoliageTransparencyCache = {}
+
+local function ApplyAmbientColor(color)
+    if Lighting then
+        Lighting.Ambient = color
+        Lighting.OutdoorAmbient = color
+        Lighting.ColorShift_Top = color
+        Lighting.ColorShift_Bottom = color
+        Lighting.FogColor = color
+        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere then
+            atmosphere.SkyColor = color
+            atmosphere.HazeColor = color
+        end
+    end
+end
+
+local function SetRemoveTextures(enabled)
+    if enabled then
+        WorldTextureCache = {}
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Texture") or obj:IsA("Decal") or obj:IsA("SurfaceAppearance") then
+                if obj.Parent then
+                    table.insert(WorldTextureCache, {Clone = obj:Clone(), Parent = obj.Parent})
+                    obj:Destroy()
+                end
+            end
+        end
+    else
+        for _, entry in ipairs(WorldTextureCache) do
+            if entry.Clone and entry.Parent then
+                entry.Clone.Parent = entry.Parent
+            end
+        end
+        WorldTextureCache = {}
+    end
+end
+
+local function ApplyBrightness(value)
+    if Lighting then
+        Lighting.Brightness = value
+    end
+end
+
+local function ApplyClockTime(value)
+    if Lighting then
+        Lighting.ClockTime = value
+    end
+end
+
+local function SetFoliageVisibility(enabled)
+    if not foliageFolder and not grassFolder then return end
+    if enabled then
+        FoliageTransparencyCache = {}
+        for _, folder in ipairs({foliageFolder, grassFolder}) do
+            if folder then
+                for _, desc in ipairs(folder:GetDescendants()) do
+                    if desc:IsA("BasePart") then
+                        FoliageTransparencyCache[desc] = desc.Transparency
+                        desc.Transparency = 1
+                    end
+                end
+            end
+        end
+    else
+        for part, original in pairs(FoliageTransparencyCache) do
+            if part and part.Parent then
+                part.Transparency = original
+            end
+        end
+        FoliageTransparencyCache = {}
+    end
+end
+
+-- // [ADDED] Windows-style WIP warning popup for triggerbot
+local function ShowTriggerWarning()
+    local WarnGui = Instance.new("Frame", ScreenGui)
+    WarnGui.Name = "TriggerWarning"
+    WarnGui.Size = UDim2.new(0, 420, 0, 170)
+    WarnGui.Position = UDim2.new(0.5, -210, 0.5, -85)
+    WarnGui.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+    WarnGui.BorderSizePixel = 0
+    WarnGui.ZIndex = 5000
+    WarnGui.Active = true
+    Instance.new("UICorner", WarnGui).CornerRadius = UDim.new(0, 4)
+    local WarnStroke = Instance.new("UIStroke", WarnGui)
+    WarnStroke.Color = Color3.fromRGB(160, 160, 160)
+    WarnStroke.Thickness = 1
+
+    -- // Windows-style title bar (blue)
+    local WarnTitle = Instance.new("Frame", WarnGui)
+    WarnTitle.BackgroundColor3 = Color3.fromRGB(0, 84, 166)
+    WarnTitle.Size = UDim2.new(1, 0, 0, 30)
+    WarnTitle.BorderSizePixel = 0
+    WarnTitle.ZIndex = 5001
+    Instance.new("UICorner", WarnTitle).CornerRadius = UDim.new(0, 4)
+    local WTMask = Instance.new("Frame", WarnTitle)
+    WTMask.Size = UDim2.new(1, 0, 0, 6)
+    WTMask.Position = UDim2.new(0, 0, 1, -6)
+    WTMask.BackgroundColor3 = Color3.fromRGB(0, 84, 166)
+    WTMask.BorderSizePixel = 0
+    WTMask.ZIndex = 5001
+
+    -- // Windows title icon + text
+    local WarnTitleIcon = Instance.new("TextLabel", WarnTitle)
+    WarnTitleIcon.BackgroundTransparency = 1
+    WarnTitleIcon.Size = UDim2.new(1, -35, 1, 0)
+    WarnTitleIcon.Position = UDim2.new(0, 8, 0, 0)
+    WarnTitleIcon.Font = Enum.Font.GothamBold
+    WarnTitleIcon.TextSize = 13
+    WarnTitleIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    WarnTitleIcon.TextXAlignment = Enum.TextXAlignment.Left
+    WarnTitleIcon.Text = "⚠  System Warning"
+    WarnTitleIcon.ZIndex = 5002
+
+    -- // Windows-style X close button on warning
+    local WarnClose = Instance.new("TextButton", WarnTitle)
+    WarnClose.BackgroundColor3 = Color3.fromRGB(196, 43, 28)
+    WarnClose.Size = UDim2.new(0, 28, 1, -4)
+    WarnClose.Position = UDim2.new(1, -30, 0, 2)
+    WarnClose.Font = Enum.Font.GothamBold
+    WarnClose.Text = "✕"
+    WarnClose.TextColor3 = Color3.fromRGB(255, 255, 255)
+    WarnClose.TextSize = 13
+    WarnClose.BorderSizePixel = 0
+    WarnClose.ZIndex = 5003
+    WarnClose.AutoButtonColor = false
+    Instance.new("UICorner", WarnClose).CornerRadius = UDim.new(0, 3)
+    WarnClose.MouseEnter:Connect(function() WarnClose.BackgroundColor3 = Color3.fromRGB(232, 17, 35) end)
+    WarnClose.MouseLeave:Connect(function() WarnClose.BackgroundColor3 = Color3.fromRGB(196, 43, 28) end)
+    WarnClose.MouseButton1Click:Connect(function() WarnGui:Destroy() end)
+
+    -- // Warning icon (yellow triangle area)
+    local IconArea = Instance.new("Frame", WarnGui)
+    IconArea.BackgroundTransparency = 1
+    IconArea.Position = UDim2.new(0, 15, 0, 45)
+    IconArea.Size = UDim2.new(0, 50, 0, 50)
+    IconArea.ZIndex = 5002
+    local IconLabel = Instance.new("TextLabel", IconArea)
+    IconLabel.BackgroundTransparency = 1
+    IconLabel.Size = UDim2.new(1, 0, 1, 0)
+    IconLabel.Font = Enum.Font.GothamBold
+    IconLabel.TextSize = 42
+    IconLabel.Text = "⚠"
+    IconLabel.TextColor3 = Color3.fromRGB(255, 190, 0)
+    IconLabel.ZIndex = 5003
+
+    -- // Warning message body
+    local WarnMsg = Instance.new("TextLabel", WarnGui)
+    WarnMsg.BackgroundTransparency = 1
+    WarnMsg.Position = UDim2.new(0, 75, 0, 40)
+    WarnMsg.Size = UDim2.new(1, -90, 0, 90)
+    WarnMsg.Font = Enum.Font.Gotham
+    WarnMsg.TextSize = 13
+    WarnMsg.TextColor3 = Color3.fromRGB(30, 30, 30)
+    WarnMsg.TextXAlignment = Enum.TextXAlignment.Left
+    WarnMsg.TextYAlignment = Enum.TextYAlignment.Top
+    WarnMsg.TextWrapped = true
+    WarnMsg.Text = "Warning: The triggerbot is a WIP and may not be 100% accurate.\n\nFor best results, use a large scope and suppressor with a weapon that has minimal recoil."
+    WarnMsg.ZIndex = 5002
+
+    -- // OK button (Windows style)
+    local OkBtn = Instance.new("TextButton", WarnGui)
+    OkBtn.BackgroundColor3 = Color3.fromRGB(225, 225, 225)
+    OkBtn.Size = UDim2.new(0, 80, 0, 26)
+    OkBtn.Position = UDim2.new(0.5, -40, 1, -36)
+    OkBtn.Font = Enum.Font.Gotham
+    OkBtn.TextSize = 13
+    OkBtn.Text = "OK"
+    OkBtn.TextColor3 = Color3.fromRGB(30, 30, 30)
+    OkBtn.BorderSizePixel = 1
+    OkBtn.ZIndex = 5002
+    OkBtn.AutoButtonColor = false
+    Instance.new("UICorner", OkBtn).CornerRadius = UDim.new(0, 3)
+    local OkStroke = Instance.new("UIStroke", OkBtn)
+    OkStroke.Color = Color3.fromRGB(160, 160, 160)
+    OkStroke.Thickness = 1
+    OkBtn.MouseEnter:Connect(function() OkBtn.BackgroundColor3 = Color3.fromRGB(200, 220, 245) end)
+    OkBtn.MouseLeave:Connect(function() OkBtn.BackgroundColor3 = Color3.fromRGB(225, 225, 225) end)
+    OkBtn.MouseButton1Click:Connect(function() WarnGui:Destroy() end)
+
+    -- // Auto-dismiss after 5 seconds
+    task.delay(5, function()
+        if WarnGui and WarnGui.Parent then WarnGui:Destroy() end
+    end)
+end
+
+-- // 9. TABS
+local Combat = CreateTab("combat.exe", true)
+local Movement = CreateTab("movement.exe", false)
+local Visuals = CreateTab("visuals.sys", false)
+local Misc = CreateTab("misc.exe", false)
+
+-- // [COMBAT] Silent Aim
+local ResetAimbot
+local ResetSilentAim = AddToggle(Combat, "combat.exe", "silent_aim (WIP)", function(state)
+    Config.SilentAim.Enabled = state
+    if state and ResetAimbot then ResetAimbot(false) end
+end)
+local ResetFOV = AddSlider(Combat, "combat.exe", "aim_fov", 0, 500, Config.SilentAim.FOV, function(val)
+    Config.SilentAim.FOV = val
+end)
+
+ResetAimbot = AddToggle(Combat, "combat.exe", "aimbot (WIP NOT 100% ACCURATE)", function(state)
+    Config.Aimbot.Enabled = state
+    if state then
+        if ResetSilentAim then ResetSilentAim(false) end
+    else
+        AimbotTarget = nil
+    end
+end)
+local ResetAimbotSmoothing = AddSlider(Combat, "combat.exe", "smoothing", 0, 25, Config.Aimbot.Smoothing, function(val)
+    Config.Aimbot.Smoothing = val
+end)
+
+-- // [COMBAT] FOV fill options
+AddSpacer(Combat, 10)
+local ResetFOVFill = AddToggle(Combat, "combat.exe", "fov_fill", function(state)
+    Config.SilentAim.FillEnabled = state
+end)
+local ResetFOVFillTrans = AddTransSlider(Combat, "fov_fill_opacity", Config.SilentAim, "FillTrans")
+AddColorRow(Combat, "fov_fill_color", Config.SilentAim, "FillColor")
+
+-- // [COMBAT] Recoil/Spread + Fire Rate
+AddSpacer(Combat, 10)
+local CombatToggleRow = Instance.new("Frame", Combat)
+CombatToggleRow.BackgroundTransparency = 1
+CombatToggleRow.Size = UDim2.new(1, 0, 0, 35)
+local CombatToggleLayout = Instance.new("UIListLayout", CombatToggleRow)
+CombatToggleLayout.FillDirection = Enum.FillDirection.Horizontal
+CombatToggleLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+CombatToggleLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+CombatToggleLayout.Padding = UDim.new(0, 12)
+local CombatTogglePadding = Instance.new("UIPadding", CombatToggleRow)
+CombatTogglePadding.PaddingLeft = UDim.new(0, 8)
+CombatTogglePadding.PaddingRight = UDim.new(0, 8)
+
+local ResetRecoilSpread = AddToggle(CombatToggleRow, "combat.exe", "recoil", function(state)
+    Config.Combat.RecoilSpread = state
+    RefreshCombatAttributes()
+end, 0.48)
+local ResetFireRate = AddToggle(CombatToggleRow, "combat.exe", "fire_rate", function(state)
+    Config.Combat.FireRate = state
+    RefreshCombatAttributes()
+end, 0.48)
+
+AddSpacer(Combat, 10)
+-- // [COMBAT] FOV color changer (same system as other color rows)
+AddColorRow(Combat, "fov_color", Config.SilentAim, "FOVColor")
+
+-- // [COMBAT] Triggerbot toggle — shows warning popup on enable
+local ResetTrigger = AddToggle(Combat, "combat.exe", "triggerbot (WIP)", function(state)
+    Config.TriggerBot.Enabled = state
+    if state then
+        ShowTriggerWarning()
+    else
+        if Config.TriggerBot.IsFiring then
+            Config.TriggerBot.IsFiring = false
+            if mouse1release then mouse1release() end
+        end
+    end
+end)
+
+-- // [MOVEMENT] WalkSpeed
+local ResetSpeedToggle = AddToggle(Movement, "movement.exe", "walk_speed", function(state)
+    Config.WalkSpeed.Enabled = state
+    if not state then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = 16 end
+        end
+    end
+end)
+local ResetSpeedSlider = AddSlider(Movement, "movement.exe", "speed_value", 24, 50, 24, function(val)
+    Config.WalkSpeed.Speed = val
+end)
+AddSpacer(Movement, 10)
+local ResetFlyToggle = AddToggle(Movement, "movement.exe", "fly_mode", function(state)
+    Config.Fly.Enabled = state
+    Notify("fly mode " .. (state and "ENABLED" or "DISABLED") .. " (Alt key toggles)")
+end)
+FlyToggleSetter = ResetFlyToggle
+AddSpacer(Movement, 10)
+Movement.CanvasSize = UDim2.new(0, 0, 0, Movement.UIListLayout.AbsoluteContentSize.Y)
+
+-- // [VISUALS] Chams ESP
+local ResetChamsToggle = AddToggle(Visuals, "visuals.sys", "chams_esp", function(state)
+    Config.Chams.Enabled = state
+    if not state then ChamsFolder:ClearAllChildren() end
+end)
+AddSpacer(Visuals, 10)
+local ResetOccludeToggle = AddToggle(Visuals, "visuals.sys", "occlude", function(state)
+    Config.Chams.Occluded = state
+end)
+AddSpacer(Visuals, 10)
+local ResetCrosshairToggle = AddToggle(Visuals, "visuals.sys", "crosshair", function(state)
+    Config.Crosshair.Enabled = state
+end)
+local ResetCrosshairDot = AddToggle(Visuals, "visuals.sys", "center_dot", function(state)
+    Config.Crosshair.CenterDot = state
+end)
+local ResetCrosshairFollow = AddToggle(Visuals, "visuals.sys", "follow_target", function(state)
+    Config.Crosshair.FollowTarget = state
+end)
+local ResetCrosshairSpokes = AddSlider(Visuals, "visuals.sys", "spokes", 2, 12, Config.Crosshair.Spokes, function(val)
+    Config.Crosshair.Spokes = val
+end)
+local ResetCrosshairLength = AddSlider(Visuals, "visuals.sys", "length", 1, 50, Config.Crosshair.Length, function(val)
+    Config.Crosshair.Length = val
+end)
+local ResetCrosshairGap = AddSlider(Visuals, "visuals.sys", "gap", 0, 30, Config.Crosshair.Gap, function(val)
+    Config.Crosshair.Gap = val
+end)
+local ResetCrosshairWidth = AddSlider(Visuals, "visuals.sys", "width", 1, 10, Config.Crosshair.Width, function(val)
+    Config.Crosshair.Width = val
+end)
+local ResetCrosshairSpin = AddSlider(Visuals, "visuals.sys", "spin", 0, 10, Config.Crosshair.Spin, function(val)
+    Config.Crosshair.Spin = val
+end)
+AddColorRow(Visuals, "crosshair_color", Config.Crosshair, "Color")
+local ResetCrosshairTrans = AddTransSlider(Visuals, "crosshair_opacity", Config.Crosshair, "Trans")
+AddSpacer(Visuals, 10)
+local ResetESPBoxes = AddToggle(Visuals, "visuals.sys", "esp_boxes", function(state)
+    Config.Chams.ESPBoxes = state
+end)
+local ResetESPNames = AddToggle(Visuals, "visuals.sys", "esp_names", function(state)
+    Config.Chams.ESPNames = state
+end)
+local ResetESPHealth = AddToggle(Visuals, "visuals.sys", "esp_health", function(state)
+    Config.Chams.ESPHealth = state
+end)
+local ResetESPTracers = AddToggle(Visuals, "visuals.sys", "esp_tracers", function(state)
+    Config.Chams.ESPTracers = state
+end)
+AddSpacer(Visuals, 10)
+local ResetTracerOrigin = AddCycleToggle(Visuals, "tracer_origin", {"bottom", "top"}, Config.Chams.TracerOriginTop and 2 or 1, function(value)
+    Config.Chams.TracerOriginTop = (value == "top")
+end)
+AddSpacer(Visuals, 10)
+AddColorRow(Visuals, "fill_color", Config.Chams.Fill, "Color")
+local ResetFillTrans = AddTransSlider(Visuals, "fill_opacity", Config.Chams.Fill, "Trans")
+AddColorRow(Visuals, "outline_color", Config.Chams.Outline, "Color")
+local ResetOutlineTrans = AddTransSlider(Visuals, "outline_opacity", Config.Chams.Outline, "Trans")
+Visuals.CanvasSize = UDim2.new(0, 0, 0, Visuals.UIListLayout.AbsoluteContentSize.Y)
+
+-- // [WORLD] Ambient and performance
+local WorldTab = CreateTab("world.exe", false)
+local ResetTextureToggle = AddToggle(WorldTab, "world.exe", "remove_textures", function(state)
+    Config.World.RemoveTextures = state
+    SetRemoveTextures(state)
+end)
+local ResetFoliageToggle = AddToggle(WorldTab, "world.exe", "remove_foliage", function(state)
+    Config.World.RemoveFoliage = state
+    SetFoliageVisibility(state)
+end)
+AddSpacer(WorldTab, 10)
+local ResetBrightness = AddSlider(WorldTab, "world.exe", "brightness", 0, 10, Config.World.Brightness, function(val)
+    Config.World.Brightness = val
+    ApplyBrightness(val)
+end)
+local ResetTimeOfDay = AddSlider(WorldTab, "world.exe", "time_of_day", 0, 24, Config.World.ClockTime, function(val)
+    Config.World.ClockTime = val
+    ApplyClockTime(val)
+end)
+AddSpacer(WorldTab, 10)
+AddColorRow(WorldTab, "ambient_color", Config.World, "AmbientColor", ApplyAmbientColor)
+WorldTab.CanvasSize = UDim2.new(0, 0, 0, WorldTab.UIListLayout.AbsoluteContentSize.Y)
+
+-- // [MISC] Unload
+-- // [ADDED] Full unload function — resets all features, values, character state
+local function UnloadAll()
+    Config.Running = false
+    Config.SilentAim.Enabled = false
+    Config.SilentAim.FOV = 100
+    Config.SilentAim.FOVColor = Defaults.FOVColor
+    Config.WalkSpeed.Enabled = false
+    Config.Chams.Enabled = false
+    Config.Chams.Occluded = false
+    Config.Chams.Fill.Color = Defaults.FillColor
+    Config.Chams.Fill.Trans = Defaults.FillTrans
+    Config.Chams.Outline.Color = Defaults.OutlineColor
+    Config.Chams.Outline.Trans = Defaults.OutlineTrans
+    Config.Chams.ESPBoxes = false
+    Config.Chams.ESPNames = false
+    Config.Chams.ESPHealth = false
+    Config.Chams.ESPTracers = false
+    Config.Chams.TracerOriginTop = false
+    Config.SilentAim.FillEnabled = false
+    Config.SilentAim.FillColor = Defaults.FOVFillColor
+    Config.SilentAim.FillTrans = Defaults.FOVFillTrans
+    Config.Aimbot.Enabled = false
+    Config.Aimbot.Smoothing = Defaults.AimbotSmoothing
+    Config.Aimbot.ShowName = true
+    Config.Aimbot.ShowHealth = true
+    Config.Aimbot.ShowWeapon = true
+    Config.Crosshair.Enabled = false
+    Config.Crosshair.CenterDot = false
+    Config.Crosshair.FollowTarget = false
+    Config.World.RemoveTextures = false
+    Config.World.RemoveFoliage = false
+    Config.World.AmbientColor = Color3.fromRGB(255,255,255)
+    SetRemoveTextures(false)
+    SetFoliageVisibility(false)
+    ApplyAmbientColor(Config.World.AmbientColor)
+
+    -- // Reset triggerbot mouse state
+    if Config.TriggerBot.IsFiring then
+        Config.TriggerBot.IsFiring = false
+        if mouse1release then mouse1release() end
+    end
+
+    -- // Reset WalkSpeed on character
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = Defaults.WalkSpeed end
+    end
+
+    -- // Reset toggle visuals
+    ResetSilentAim(false)
+    if ResetAimbot then ResetAimbot(false) end
+    ResetSpeedToggle(false)
+    ResetChamsToggle(false)
+    ResetOccludeToggle(false)
+    ResetCrosshairToggle(false)
+    ResetCrosshairDot(false)
+    ResetCrosshairFollow(false)
+    ResetESPBoxes(false)
+    ResetESPNames(false)
+    ResetESPHealth(false)
+    ResetESPTracers(false)
+    ResetTracerOrigin("bottom")
+    ResetTrigger(false)
+    ResetTextureToggle(false)
+    ResetFoliageToggle(false)
+    ResetFOVFill(false)
+
+    -- // Reset slider visuals
+    ResetFOV(100)
+    ResetAimbotSmoothing(Defaults.AimbotSmoothing)
+    ResetSpeedSlider(24)
+    ResetFillTrans(Defaults.FillTrans)
+    ResetFOVFillTrans(Defaults.FOVFillTrans)
+    ResetOutlineTrans(Defaults.OutlineTrans)
+    ResetCrosshairSpokes(Config.Crosshair.Spokes)
+    ResetCrosshairLength(Config.Crosshair.Length)
+    ResetCrosshairGap(Config.Crosshair.Gap)
+    ResetCrosshairWidth(Config.Crosshair.Width)
+    ResetCrosshairSpin(Config.Crosshair.Spin)
+    ResetCrosshairTrans(0)
+
+    -- // Close color picker if open
+    if ActiveColorPicker then CloseColorPicker() end
+
+    -- // Cleanup
+    ChamsFolder:ClearAllChildren()
+    ChamsFolder:Destroy()
+    if TriggerBotConnection then TriggerBotConnection:Disconnect(); TriggerBotConnection = nil end
+    if SilentAimConnection then SilentAimConnection:Disconnect(); SilentAimConnection = nil end
+    if ChamsConnection then ChamsConnection:Disconnect(); ChamsConnection = nil end
+    if FOVCircleConnection then FOVCircleConnection:Disconnect(); FOVCircleConnection = nil end
+    if oldNamecall then hookmetamethod(game, "__namecall", oldNamecall) end
+    ScreenGui:Destroy()
+end
+
+local UnloadBtn = Instance.new("TextButton", Misc)
+UnloadBtn.BackgroundTransparency = 1
+UnloadBtn.Size = UDim2.new(1, 0, 0, 25)
+UnloadBtn.Font = Enum.Font.Code
+UnloadBtn.RichText = true
+UnloadBtn.TextColor3 = COLORS.TEXT_MAIN
+UnloadBtn.TextSize = 16
+UnloadBtn.TextXAlignment = Enum.TextXAlignment.Left
+UnloadBtn.Text = "> run - <font color=\"#FF0000\">unload.exe</font>"
+UnloadBtn.MouseButton1Click:Connect(UnloadAll)
+Misc.CanvasSize = UDim2.new(0, 0, 0, Misc.UIListLayout.AbsoluteContentSize.Y)
+
+-- // [CHANGED] Close button now calls UnloadAll to fully unload
+CloseBtn.MouseButton1Click:Connect(UnloadAll)
+
+-- // 10. INTERACTION LOGIC
+MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false; ReopenBox.Visible = true end)
+ReopenBox.MouseButton1Click:Connect(function() MainFrame.Visible = true; ReopenBox.Visible = false end)
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Delete then
+        MainFrame.Visible = not MainFrame.Visible
+        ReopenBox.Visible = not MainFrame.Visible
+    end
+
+    if input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
+        Config.Fly.Enabled = not Config.Fly.Enabled
+        if FlyToggleSetter then FlyToggleSetter(Config.Fly.Enabled) end
+        Notify("fly mode " .. (Config.Fly.Enabled and "ENABLED" or "DISABLED"))
+    end
+
+    if input.KeyCode == Enum.KeyCode.W then FlyControl.W = true end
+    if input.KeyCode == Enum.KeyCode.A then FlyControl.A = true end
+    if input.KeyCode == Enum.KeyCode.S then FlyControl.S = true end
+    if input.KeyCode == Enum.KeyCode.D then FlyControl.D = true end
+    if input.KeyCode == Enum.KeyCode.Space then FlyControl.Space = true end
+    if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then FlyControl.Shift = true end
+end)
+
+local Dragging, DragStart, StartPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        Dragging = true; DragStart = input.Position; StartPos = MainFrame.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and Dragging then
+        local D = input.Position - DragStart
+        MainFrame.Position = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + D.X, StartPos.Y.Scale, StartPos.Y.Offset + D.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = false end
+    if input.KeyCode == Enum.KeyCode.W then FlyControl.W = false end
+    if input.KeyCode == Enum.KeyCode.A then FlyControl.A = false end
+    if input.KeyCode == Enum.KeyCode.S then FlyControl.S = false end
+    if input.KeyCode == Enum.KeyCode.D then FlyControl.D = false end
+    if input.KeyCode == Enum.KeyCode.Space then FlyControl.Space = false end
+    if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then FlyControl.Shift = false end
+end)
+
+-- // 11. FOV CIRCLE VISUAL (uses FOVColor from config)
+FOVFillFrame = Instance.new("Frame", ScreenGui)
+FOVFillFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVFillFrame.BackgroundTransparency = 1
+FOVFillFrame.BorderSizePixel = 0
+FOVFillFrame.ZIndex = 999
+local FOVFillCorner = Instance.new("UICorner", FOVFillFrame)
+FOVFillCorner.CornerRadius = UDim.new(1, 0)
+
+local FOVCircle = Instance.new("Frame", ScreenGui)
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+local FOVStroke = Instance.new("UIStroke", FOVCircle)
+FOVStroke.Color = Config.SilentAim.FOVColor
+Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
+
+SetupFOVDrawings()
+
+FOVCircleConnection = RunService.RenderStepped:Connect(function()
+    if not Config.Running then
+        FOVCircle.Visible = false
+        FOVFillFrame.Visible = false
+        if FOVInfoText then FOVInfoText.Visible = false end
+        return
+    end
+    local mouse = UserInputService:GetMouseLocation()
+    local size = Config.SilentAim.FOV * 2
+    FOVCircle.Position = UDim2.new(0, mouse.X, 0, mouse.Y)
+    FOVCircle.Size = UDim2.new(0, size, 0, size)
+    FOVCircle.Visible = Config.SilentAim.Enabled or Config.Aimbot.Enabled
+    FOVStroke.Color = Config.SilentAim.FOVColor
+
+    FOVFillFrame.Position = FOVCircle.Position
+    FOVFillFrame.Size = FOVCircle.Size
+    FOVFillFrame.BackgroundColor3 = Config.SilentAim.FillColor
+    FOVFillFrame.BackgroundTransparency = 1 - Config.SilentAim.FillTrans
+    FOVFillFrame.Visible = Config.SilentAim.FillEnabled and (Config.SilentAim.Enabled or Config.Aimbot.Enabled)
+
+    UpdateAimbot()
+    UpdateCrosshair()
+    RefreshFOVInfoText()
+end)
