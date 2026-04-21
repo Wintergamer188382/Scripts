@@ -3,380 +3,765 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
-local lp = Players.LocalPlayer
-local mouse = lp:GetMouse()
-local camera = workspace.CurrentCamera
+local localPlayer = Players.LocalPlayer
+local mouse = localPlayer:GetMouse()
+local cam = workspace.CurrentCamera
 
-local active = false
-local size = 150
-local smooth = 0
-local part = "Head"
-local rig = "R15"
-local key = Enum.UserInputType.MouseButton2
+local aimbotEnabled = false
+local fovRadius = 150
+local aimSmooth = 0
+local targetPart = "Head"
+local rigType = "R15"
+local aimKey = Enum.UserInputType.MouseButton2
 
-local f_clr = Color3.fromRGB(255, 255, 255)
-local f_trans = 0.8
-local f_on = false
-local o_clr = Color3.fromRGB(255, 255, 255)
-local o_trans = 0
-local o_on = false
+local fillCol = Color3.fromRGB(255, 255, 255)
+local fillTrans = 0.8
+local fillOn = false
+local outlineCol = Color3.fromRGB(255, 255, 255)
+local outlineTrans = 0
+local outlineOn = false
 
-local n_on = false
-local h_on = false
-local d_on = false
+local showName = false
+local showHealth = false
+local showDist = false
 
-local c_on = false
-local c_dot = false
-local c_spokes = 4
-local c_len = 10
-local c_gap = 5
-local c_wid = 2
-local c_spin = 0
-local c_fol = false
-local c_clr = Color3.fromRGB(255, 255, 255)
-local c_trans = 0
+local crossOn = false
+local crossDot = false
+local crossSpokes = 4
+local crossLength = 10
+local crossGap = 5
+local crossWidth = 2
+local spinSpeed = 0
+local followTarget = false
+local crossCol = Color3.fromRGB(255, 255, 255)
+local crossTrans = 0
 
-local ch_on = false
-local ch_occ = false
-local ch_f_clr = Color3.fromRGB(255, 0, 0)
-local ch_f_trans = 0.5
-local ch_o_clr = Color3.fromRGB(255, 255, 255)
-local ch_o_trans = 0
+local chamsOn = false
+local occludeChams = false
+local chamsFill = Color3.fromRGB(255, 0, 0)
+local chamsFillTrans = 0.5
+local chamsOutline = Color3.fromRGB(255, 255, 255)
+local chamsOutlineTrans = 0
 
-local e_on = false
-local e_box = false
-local e_health = false
-local e_clr = Color3.fromRGB(255, 255, 255)
+local espOn = false
+local espBox = false
+local espHealthBar = false
+local espCol = Color3.fromRGB(255, 255, 255)
 
-local menu_up = true
-local step = 0
-local pick_fn = nil
-local h, s, v, a = 0, 1, 1, 1 -- Added alpha 'a'
-local dragging = false
+local menuOpen = true
+local spinStep = 0
+local colorCallback = nil
+local h, s, v, a = 0, 1, 1, 1 
+local isDragging = false
 
-local chams = Instance.new("Folder", CoreGui)
-local circ = Drawing.new("Circle"); circ.Thickness = 1; circ.NumSides = 64; circ.Visible = false
-local fill = Drawing.new("Circle"); fill.Thickness = 0; fill.NumSides = 64; fill.Filled = true; fill.Visible = false
-local text = Drawing.new("Text"); text.Size = 18; text.Center = true; text.Outline = true; text.Visible = false; text.Font = 2; text.Color = Color3.new(1,1,1)
-local dot = Drawing.new("Circle"); dot.Filled = true; dot.Visible = false; dot.ZIndex = 105
-local c_lines = {}
-local esp = {}
+local chamsFolder = Instance.new("Folder", CoreGui)
 
-local function kill_lines() 
-    for _, v in pairs(c_lines) do v:Remove() end 
-    table.clear(c_lines) 
+local fovOutline = Drawing.new("Circle")
+fovOutline.Thickness = 1
+fovOutline.NumSides = 64
+fovOutline.Visible = false
+
+local fovFill = Drawing.new("Circle")
+fovFill.Thickness = 0
+fovFill.NumSides = 64
+fovFill.Filled = true
+fovFill.Visible = false
+
+local targetText = Drawing.new("Text")
+targetText.Size = 18
+targetText.Center = true
+targetText.Outline = true
+targetText.Visible = false
+targetText.Font = 2
+targetText.Color = Color3.new(1, 1, 1)
+
+local centerDot = Drawing.new("Circle")
+centerDot.Filled = true
+centerDot.Visible = false
+centerDot.ZIndex = 105
+
+local crosshairLines = {}
+local espCache = {}
+
+local function clearLines() 
+    for _, line in pairs(crosshairLines) do 
+        line:Remove() 
+    end 
+    table.clear(crosshairLines) 
 end
 
-local function round(o, r) 
-    local c = Instance.new("UICorner", o)
-    c.CornerRadius = UDim.new(0, r or 6) 
+local function applyCorner(obj, rad) 
+    local corner = Instance.new("UICorner", obj)
+    corner.CornerRadius = UDim.new(0, rad or 6) 
 end
 
-local gui = Instance.new("ScreenGui", CoreGui)
-local pgui = Instance.new("ScreenGui", CoreGui)
-local main = Instance.new("Frame", gui); main.Size = UDim2.new(0.4, 0, 0.5, 0); main.Position = UDim2.new(0.3, 0, 0.25, 0); main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); round(main)
+local mainGui = Instance.new("ScreenGui", CoreGui)
+local popupGui = Instance.new("ScreenGui", CoreGui)
 
--- Simple Dragging for Main Menu
-local function make_draggable(top, obj)
+local mainFrame = Instance.new("Frame", mainGui)
+mainFrame.Size = UDim2.new(0.4, 0, 0.5, 0)
+mainFrame.Position = UDim2.new(0.3, 0, 0.25, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+applyCorner(mainFrame)
+
+local function makeDraggable(dragArea, targetFrame)
     local dragStart, startPos
-    top.InputBegan:Connect(function(input)
+    
+    dragArea.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragStart = input.Position
-            startPos = obj.Position
-            local move; move = UserInputService.InputChanged:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseMovement then
-                    local delta = input.Position - dragStart
-                    obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            startPos = targetFrame.Position
+            
+            local moveConn
+            moveConn = UserInputService.InputChanged:Connect(function(input2)
+                if input2.UserInputType == Enum.UserInputType.MouseMovement then
+                    local delta = input2.Position - dragStart
+                    targetFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
                 end
             end)
+            
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then move:Disconnect() end
+                if input.UserInputState == Enum.UserInputState.End then 
+                    moveConn:Disconnect() 
+                end
             end)
         end
     end)
 end
 
-local tabs = Instance.new("Frame", main); tabs.Size = UDim2.new(1, 0, 0, 40); tabs.BackgroundTransparency = 1
-make_draggable(tabs, main)
+local tabContainer = Instance.new("Frame", mainFrame)
+tabContainer.Size = UDim2.new(1, 0, 0, 40)
+tabContainer.BackgroundTransparency = 1
+makeDraggable(tabContainer, mainFrame)
 
-local b1 = Instance.new("TextButton", tabs); b1.Size = UDim2.new(0.5, 0, 1, 0); b1.Text = "COMBAT"; b1.BackgroundColor3 = Color3.fromRGB(25, 25, 25); b1.TextColor3 = Color3.new(1,1,1); b1.Font = "Code"
-local b2 = Instance.new("TextButton", tabs); b2.Size = UDim2.new(0.5, 0, 1, 0); b2.Position = UDim2.new(0.5, 0, 0, 0); b2.Text = "VISUALS"; b2.BackgroundColor3 = Color3.fromRGB(20, 20, 20); b2.TextColor3 = Color3.new(0.6, 0.6, 0.6); b2.Font = "Code"
+local combatBtn = Instance.new("TextButton", tabContainer)
+combatBtn.Size = UDim2.new(0.5, 0, 1, 0)
+combatBtn.Text = "COMBAT"
+combatBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+combatBtn.TextColor3 = Color3.new(1, 1, 1)
+combatBtn.Font = Enum.Font.Code
 
-local p1 = Instance.new("Frame", main); p1.Size = UDim2.new(1, 0, 1, -40); p1.Position = UDim2.new(0, 0, 0, 40); p1.BackgroundTransparency = 1
-local p2 = Instance.new("Frame", main); p2.Size = UDim2.new(1, 0, 1, -40); p2.Position = UDim2.new(0, 0, 0, 40); p2.BackgroundTransparency = 1; p2.Visible = false
+local visualsBtn = Instance.new("TextButton", tabContainer)
+visualsBtn.Size = UDim2.new(0.5, 0, 1, 0)
+visualsBtn.Position = UDim2.new(0.5, 0, 0, 0)
+visualsBtn.Text = "VISUALS"
+visualsBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+visualsBtn.TextColor3 = Color3.new(0.6, 0.6, 0.6)
+visualsBtn.Font = Enum.Font.Code
 
-b1.MouseButton1Click:Connect(function() 
-    p1.Visible = true; p2.Visible = false
-    b1.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    b2.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
+local combatPage = Instance.new("Frame", mainFrame)
+combatPage.Size = UDim2.new(1, 0, 1, -40)
+combatPage.Position = UDim2.new(0, 0, 0, 40)
+combatPage.BackgroundTransparency = 1
+
+local visualsPage = Instance.new("Frame", mainFrame)
+visualsPage.Size = UDim2.new(1, 0, 1, -40)
+visualsPage.Position = UDim2.new(0, 0, 0, 40)
+visualsPage.BackgroundTransparency = 1
+visualsPage.Visible = false
+
+combatBtn.MouseButton1Click:Connect(function() 
+    combatPage.Visible = true
+    visualsPage.Visible = false
+    combatBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    visualsBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
 end)
 
-b2.MouseButton1Click:Connect(function() 
-    p1.Visible = false; p2.Visible = true
-    b2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    b1.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
+visualsBtn.MouseButton1Click:Connect(function() 
+    combatPage.Visible = false
+    visualsPage.Visible = true
+    visualsBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    combatBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20) 
 end)
 
-local function make_col(pos, p)
-    local f = Instance.new("Frame", p); f.Size = UDim2.new(0.33, -10, 1, -20); f.Position = pos; f.BackgroundTransparency = 1
-    local s = Instance.new("ScrollingFrame", f); s.Size = UDim2.new(1, 0, 1, 0); s.BackgroundTransparency = 1; s.BorderSizePixel = 0; s.ScrollBarThickness = 2
-    local c = Instance.new("Frame", s); c.Size = UDim2.new(1, 0, 0, 0); c.BackgroundTransparency = 1
-    local l = Instance.new("UIListLayout", c); l.Padding = UDim.new(0, 10); l.HorizontalAlignment = "Center"; l.SortOrder = Enum.SortOrder.LayoutOrder
-    l:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() s.CanvasSize = UDim2.new(0, 0, 0, l.AbsoluteContentSize.Y + 20) end)
-    return c
+local function buildColumn(pos, parentObj)
+    local container = Instance.new("Frame", parentObj)
+    container.Size = UDim2.new(0.33, -10, 1, -20)
+    container.Position = pos
+    container.BackgroundTransparency = 1
+    
+    local scrollFrame = Instance.new("ScrollingFrame", container)
+    scrollFrame.Size = UDim2.new(1, 0, 1, 0)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 2
+    
+    local listHolder = Instance.new("Frame", scrollFrame)
+    listHolder.Size = UDim2.new(1, 0, 0, 0)
+    listHolder.BackgroundTransparency = 1
+    
+    local layout = Instance.new("UIListLayout", listHolder)
+    layout.Padding = UDim.new(0, 10)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() 
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20) 
+    end)
+    
+    return listHolder
 end
 
-local c1 = make_col(UDim2.new(0, 10, 0, 10), p1)
-local c2 = make_col(UDim2.new(0.33, 5, 0, 10), p1)
-local c3 = make_col(UDim2.new(0.66, 0, 0, 10), p1)
-local vc1 = make_col(UDim2.new(0, 10, 0, 10), p2)
+local cCol1 = buildColumn(UDim2.new(0, 10, 0, 10), combatPage)
+local cCol2 = buildColumn(UDim2.new(0.33, 5, 0, 10), combatPage)
+local cCol3 = buildColumn(UDim2.new(0.66, 0, 0, 10), combatPage)
+local vCol1 = buildColumn(UDim2.new(0, 10, 0, 10), visualsPage)
 
-local cp = Instance.new("Frame", pgui); cp.Size = UDim2.new(0, 240, 0, 180); cp.BackgroundColor3 = Color3.fromRGB(20, 20, 20); cp.Visible = false; round(cp)
-local cp_drag = Instance.new("Frame", cp); cp_drag.Size = UDim2.new(1, 0, 0, 25); cp_drag.BackgroundTransparency = 1; make_draggable(cp_drag, cp)
+local colorPopup = Instance.new("Frame", popupGui)
+colorPopup.Size = UDim2.new(0, 240, 0, 180)
+colorPopup.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+colorPopup.Visible = false
+applyCorner(colorPopup)
 
-local h_b = Instance.new("Frame", cp); h_b.Size = UDim2.new(1, -30, 0, 15); h_b.Position = UDim2.new(0, 15, 0, 35); round(h_b, 4)
-local h_g = Instance.new("UIGradient", h_b); h_g.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(1,0,0)), ColorSequenceKeypoint.new(0.16, Color3.new(1,1,0)), ColorSequenceKeypoint.new(0.33, Color3.new(0,1,0)), ColorSequenceKeypoint.new(0.49, Color3.new(0,1,1)), ColorSequenceKeypoint.new(0.66, Color3.new(0,0,1)), ColorSequenceKeypoint.new(0.83, Color3.new(1,0,1)), ColorSequenceKeypoint.new(1, Color3.new(1,0,0))})
-local h_p = Instance.new("Frame", h_b); h_p.Size = UDim2.new(0, 10, 1, 4); h_p.Position = UDim2.new(0,0,0.5,0); h_p.AnchorPoint = Vector2.new(0.5, 0.5); h_p.BackgroundColor3 = Color3.new(1,1,1); round(h_p, 2)
+local dragBarPopup = Instance.new("Frame", colorPopup)
+dragBarPopup.Size = UDim2.new(1, 0, 0, 25)
+dragBarPopup.BackgroundTransparency = 1
+makeDraggable(dragBarPopup, colorPopup)
 
-local v_b = Instance.new("Frame", cp); v_b.Size = UDim2.new(1, -30, 0, 15); v_b.Position = UDim2.new(0, 15, 0, 75); round(v_b, 4)
-local v_g = Instance.new("UIGradient", v_b)
-local v_p = Instance.new("Frame", v_b); v_p.Size = UDim2.new(0, 10, 1, 4); v_p.Position = UDim2.new(1,0,0.5,0); v_p.AnchorPoint = Vector2.new(0.5, 0.5); v_p.BackgroundColor3 = Color3.new(1,1,1); round(v_p, 2)
+local hueBack = Instance.new("Frame", colorPopup)
+hueBack.Size = UDim2.new(1, -30, 0, 15)
+hueBack.Position = UDim2.new(0, 15, 0, 35)
+applyCorner(hueBack, 4)
 
-local a_b = Instance.new("Frame", cp); a_b.Size = UDim2.new(1, -30, 0, 15); a_b.Position = UDim2.new(0, 15, 0, 115); round(a_b, 4); a_b.BackgroundColor3 = Color3.fromRGB(45,45,45)
-local a_f = Instance.new("Frame", a_b); a_f.Size = UDim2.new(1, 0, 1, 0); a_f.BackgroundColor3 = Color3.new(1,1,1); round(a_f, 4)
-local a_p = Instance.new("Frame", a_b); a_p.Size = UDim2.new(0, 10, 1, 4); a_p.Position = UDim2.new(1,0,0.5,0); a_p.AnchorPoint = Vector2.new(0.5, 0.5); a_p.BackgroundColor3 = Color3.new(1,1,1); round(a_p, 2)
+local hueGrad = Instance.new("UIGradient", hueBack)
+hueGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.new(1,0,0)), 
+    ColorSequenceKeypoint.new(0.16, Color3.new(1,1,0)), 
+    ColorSequenceKeypoint.new(0.33, Color3.new(0,1,0)), 
+    ColorSequenceKeypoint.new(0.49, Color3.new(0,1,1)), 
+    ColorSequenceKeypoint.new(0.66, Color3.new(0,0,1)), 
+    ColorSequenceKeypoint.new(0.83, Color3.new(1,0,1)), 
+    ColorSequenceKeypoint.new(1, Color3.new(1,0,0))
+})
 
-local close_cp = Instance.new("TextButton", cp); close_cp.Size = UDim2.new(1, -20, 0, 25); close_cp.Position = UDim2.new(0, 10, 1, -35); close_cp.Text = "CLOSE"; close_cp.BackgroundColor3 = Color3.fromRGB(35, 35, 35); close_cp.TextColor3 = Color3.new(1,1,1); close_cp.Font = "Code"; round(close_cp)
-close_cp.MouseButton1Click:Connect(function() cp.Visible = false end)
+local huePick = Instance.new("Frame", hueBack)
+huePick.Size = UDim2.new(0, 10, 1, 4)
+huePick.Position = UDim2.new(0, 0, 0.5, 0)
+huePick.AnchorPoint = Vector2.new(0.5, 0.5)
+huePick.BackgroundColor3 = Color3.new(1, 1, 1)
+applyCorner(huePick, 2)
 
-local function update_cp()
-    local base = Color3.fromHSV(h, 1, 1)
-    v_g.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(0,0,0)), ColorSequenceKeypoint.new(0.5, base), ColorSequenceKeypoint.new(1, Color3.new(1,1,1))})
-    if pick_fn then
-        local s_val = v <= 0.5 and 1 or 1 - ((v - 0.5) * 2)
-        local v_val = v <= 0.5 and v * 2 or 1
-        pick_fn(Color3.fromHSV(h, s_val, v_val), 1 - a)
+local valBack = Instance.new("Frame", colorPopup)
+valBack.Size = UDim2.new(1, -30, 0, 15)
+valBack.Position = UDim2.new(0, 15, 0, 75)
+applyCorner(valBack, 4)
+
+local valGrad = Instance.new("UIGradient", valBack)
+
+local valPick = Instance.new("Frame", valBack)
+valPick.Size = UDim2.new(0, 10, 1, 4)
+valPick.Position = UDim2.new(1, 0, 0.5, 0)
+valPick.AnchorPoint = Vector2.new(0.5, 0.5)
+valPick.BackgroundColor3 = Color3.new(1, 1, 1)
+applyCorner(valPick, 2)
+
+local alphaBack = Instance.new("Frame", colorPopup)
+alphaBack.Size = UDim2.new(1, -30, 0, 15)
+alphaBack.Position = UDim2.new(0, 15, 0, 115)
+alphaBack.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+applyCorner(alphaBack, 4)
+
+local alphaFill = Instance.new("Frame", alphaBack)
+alphaFill.Size = UDim2.new(1, 0, 1, 0)
+alphaFill.BackgroundColor3 = Color3.new(1, 1, 1)
+applyCorner(alphaFill, 4)
+
+local alphaPick = Instance.new("Frame", alphaBack)
+alphaPick.Size = UDim2.new(0, 10, 1, 4)
+alphaPick.Position = UDim2.new(1, 0, 0.5, 0)
+alphaPick.AnchorPoint = Vector2.new(0.5, 0.5)
+alphaPick.BackgroundColor3 = Color3.new(1, 1, 1)
+applyCorner(alphaPick, 2)
+
+local closePopup = Instance.new("TextButton", colorPopup)
+closePopup.Size = UDim2.new(1, -20, 0, 25)
+closePopup.Position = UDim2.new(0, 10, 1, -35)
+closePopup.Text = "CLOSE"
+closePopup.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+closePopup.TextColor3 = Color3.new(1, 1, 1)
+closePopup.Font = Enum.Font.Code
+applyCorner(closePopup)
+
+closePopup.MouseButton1Click:Connect(function() 
+    colorPopup.Visible = false 
+end)
+
+local function updateColor()
+    local baseCol = Color3.fromHSV(h, 1, 1)
+    valGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(0,0,0)), 
+        ColorSequenceKeypoint.new(0.5, baseCol), 
+        ColorSequenceKeypoint.new(1, Color3.new(1,1,1))
+    })
+    
+    if colorCallback then
+        local sat = v <= 0.5 and 1 or 1 - ((v - 0.5) * 2)
+        local val = v <= 0.5 and v * 2 or 1
+        colorCallback(Color3.fromHSV(h, sat, val), 1 - a)
     end
 end
 
-local function drag(o, fn)
-    o.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            local c; c = RunService.RenderStepped:Connect(function()
-                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then c:Disconnect(); dragging = false; return end
-                local m = UserInputService:GetMouseLocation()
-                local x = math.clamp((m.X - o.AbsolutePosition.X) / o.AbsoluteSize.X, 0, 1)
-                fn(x)
+local function makeSliderDrag(obj, callbackFunc)
+    obj.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true
+            local dragConn
+            dragConn = RunService.RenderStepped:Connect(function()
+                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then 
+                    dragConn:Disconnect()
+                    isDragging = false 
+                    return 
+                end
+                
+                local mPos = UserInputService:GetMouseLocation()
+                local perc = math.clamp((mPos.X - obj.AbsolutePosition.X) / obj.AbsoluteSize.X, 0, 1)
+                callbackFunc(perc)
             end)
         end
     end)
 end
 
-drag(h_b, function(x) h = x; h_p.Position = UDim2.new(x, 0, 0.5, 0); update_cp() end)
-drag(v_b, function(x) v = x; v_p.Position = UDim2.new(x, 0, 0.5, 0); update_cp() end)
-drag(a_b, function(x) a = x; a_f.Size = UDim2.new(x, 0, 1, 0); a_p.Position = UDim2.new(x, 0, 0.5, 0); update_cp() end)
+makeSliderDrag(hueBack, function(perc) h = perc; huePick.Position = UDim2.new(perc, 0, 0.5, 0); updateColor() end)
+makeSliderDrag(valBack, function(perc) v = perc; valPick.Position = UDim2.new(perc, 0, 0.5, 0); updateColor() end)
+makeSliderDrag(alphaBack, function(perc) a = perc; alphaFill.Size = UDim2.new(perc, 0, 1, 0); alphaPick.Position = UDim2.new(perc, 0, 0.5, 0); updateColor() end)
 
-local idx = 0
-local function label(t, p)
-    idx = idx + 1
-    local l = Instance.new("TextLabel", p); l.Size = UDim2.new(1, -20, 0, 30); l.BackgroundTransparency = 1; l.Font = "Code"; l.Text = "--- " .. t:upper() .. " ---"; l.TextColor3 = Color3.fromRGB(255, 105, 180); l.TextSize = 14; l.LayoutOrder = idx
+local orderIndex = 0
+
+local function createLabel(textVal, parentObj)
+    orderIndex = orderIndex + 1
+    local textLabel = Instance.new("TextLabel", parentObj)
+    textLabel.Size = UDim2.new(1, -20, 0, 30)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = Enum.Font.Code
+    textLabel.Text = "--- " .. textVal:upper() .. " ---"
+    textLabel.TextColor3 = Color3.fromRGB(255, 105, 180)
+    textLabel.TextSize = 14
+    textLabel.LayoutOrder = orderIndex
 end
 
-local function toggle(t, cur, p, fn)
-    idx = idx + 1
-    local s = cur
-    local b = Instance.new("TextButton", p); b.Size = UDim2.new(1, -20, 0, 35); b.BackgroundColor3 = Color3.fromRGB(22, 22, 22); b.Font = "Code"; b.TextColor3 = Color3.new(1,1,1); b.Text = t .. ": " .. (s and "ON" or "OFF"); b.LayoutOrder = idx; round(b)
-    b.MouseButton1Click:Connect(function()
-        s = not s
-        b.Text = t .. ": " .. (s and "ON" or "OFF")
-        b.TextColor3 = s and Color3.fromRGB(255, 105, 180) or Color3.new(1,1,1)
-        fn(s)
+local function createToggle(textVal, currentState, parentObj, callbackFunc)
+    orderIndex = orderIndex + 1
+    local state = currentState
+    local btn = Instance.new("TextButton", parentObj)
+    btn.Size = UDim2.new(1, -20, 0, 35)
+    btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+    btn.Font = Enum.Font.Code
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = textVal .. ": " .. (state and "ON" or "OFF")
+    btn.LayoutOrder = orderIndex
+    applyCorner(btn)
+    
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = textVal .. ": " .. (state and "ON" or "OFF")
+        btn.TextColor3 = state and Color3.fromRGB(255, 105, 180) or Color3.new(1, 1, 1)
+        callbackFunc(state)
     end)
-    if s then b.TextColor3 = Color3.fromRGB(255, 105, 180) end
+    
+    if state then 
+        btn.TextColor3 = Color3.fromRGB(255, 105, 180) 
+    end
 end
 
-local function slider(t, cur, min, max, p, fn)
-    idx = idx + 1
-    local f = Instance.new("Frame", p); f.Size = UDim2.new(1, -20, 0, 45); f.BackgroundTransparency = 1; f.LayoutOrder = idx
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 15); l.Text = t .. ": " .. cur; l.TextColor3 = Color3.new(0.8,0.8,0.8); l.Font = "Code"; l.BackgroundTransparency = 1
-    local b = Instance.new("Frame", f); b.Size = UDim2.new(1, 0, 0, 8); b.Position = UDim2.new(0, 0, 0, 22); b.BackgroundColor3 = Color3.fromRGB(35,35,35); round(b)
-    local i = Instance.new("Frame", b); i.Size = UDim2.new((cur-min)/(max-min), 0, 1, 0); i.BackgroundColor3 = Color3.fromRGB(255, 105, 180); round(i)
-    b.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            local move; move = RunService.RenderStepped:Connect(function()
-                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then move:Disconnect(); dragging = false; return end
-                local x = math.clamp((UserInputService:GetMouseLocation().X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
-                local val = math.floor(min + (x * (max - min)))
-                l.Text = t .. ": " .. val .. "/" .. max; i.Size = UDim2.new(x, 0, 1, 0)
-                fn(val)
+local function createSlider(textVal, currentNum, minNum, maxNum, parentObj, callbackFunc)
+    orderIndex = orderIndex + 1
+    local frame = Instance.new("Frame", parentObj)
+    frame.Size = UDim2.new(1, -20, 0, 45)
+    frame.BackgroundTransparency = 1
+    frame.LayoutOrder = orderIndex
+    
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 15)
+    title.Text = textVal .. ": " .. currentNum
+    title.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+    title.Font = Enum.Font.Code
+    title.BackgroundTransparency = 1
+    
+    local sliderBack = Instance.new("Frame", frame)
+    sliderBack.Size = UDim2.new(1, 0, 0, 8)
+    sliderBack.Position = UDim2.new(0, 0, 0, 22)
+    sliderBack.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    applyCorner(sliderBack)
+    
+    local sliderFill = Instance.new("Frame", sliderBack)
+    sliderFill.Size = UDim2.new((currentNum - minNum) / (maxNum - minNum), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(255, 105, 180)
+    applyCorner(sliderFill)
+    
+    sliderBack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true
+            local moveConn
+            moveConn = RunService.RenderStepped:Connect(function()
+                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then 
+                    moveConn:Disconnect()
+                    isDragging = false 
+                    return 
+                end
+                
+                local mPos = UserInputService:GetMouseLocation()
+                local perc = math.clamp((mPos.X - sliderBack.AbsolutePosition.X) / sliderBack.AbsoluteSize.X, 0, 1)
+                local finalVal = math.floor(minNum + (perc * (maxNum - minNum)))
+                
+                title.Text = textVal .. ": " .. finalVal .. "/" .. maxNum
+                sliderFill.Size = UDim2.new(perc, 0, 1, 0)
+                callbackFunc(finalVal)
             end)
         end
     end)
 end
 
-local function color(t, cur, alpha, p, fn)
-    idx = idx + 1
-    local f = Instance.new("Frame", p); f.Size = UDim2.new(1, -20, 0, 35); f.BackgroundTransparency = 1; f.LayoutOrder = idx
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 1, 0); l.Text = "  " .. t; l.TextColor3 = Color3.new(1,1,1); l.Font = "Code"; l.TextXAlignment = "Left"; l.BackgroundTransparency = 1
-    local b = Instance.new("TextButton", f); b.Size = UDim2.new(0, 40, 0, 20); b.Position = UDim2.new(1, -45, 0.5, -10); b.Text = ""; b.BackgroundColor3 = cur; round(b)
-    b.MouseButton1Click:Connect(function()
-        cp.Visible = false -- Closes existing before opening new one
-        pick_fn = function(c, trans) b.BackgroundColor3 = c; fn(c, trans) end
-        local _h, _s, _v = b.BackgroundColor3:ToHSV()
-        h = _h; v = _s == 1 and _v / 2 or 0.5 + ((1-_s)/2); a = 1 - alpha
-        h_p.Position = UDim2.new(h, 0, 0.5, 0)
-        v_p.Position = UDim2.new(v, 0, 0.5, 0)
-        a_p.Position = UDim2.new(a, 0, 0.5, 0)
-        a_f.Size = UDim2.new(a, 0, 1, 0)
-        local m_pos = UserInputService:GetMouseLocation()
-        cp.Position = UDim2.new(0, m_pos.X + 20, 0, m_pos.Y - 50)
-        cp.Visible = true
+local function createColorPicker(textVal, currentCol, currentAlpha, parentObj, callbackFunc)
+    orderIndex = orderIndex + 1
+    local frame = Instance.new("Frame", parentObj)
+    frame.Size = UDim2.new(1, -20, 0, 35)
+    frame.BackgroundTransparency = 1
+    frame.LayoutOrder = orderIndex
+    
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 1, 0)
+    title.Text = "  " .. textVal
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.Font = Enum.Font.Code
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.BackgroundTransparency = 1
+    
+    local colorBtn = Instance.new("TextButton", frame)
+    colorBtn.Size = UDim2.new(0, 40, 0, 20)
+    colorBtn.Position = UDim2.new(1, -45, 0.5, -10)
+    colorBtn.Text = ""
+    colorBtn.BackgroundColor3 = currentCol
+    applyCorner(colorBtn)
+    
+    colorBtn.MouseButton1Click:Connect(function()
+        colorPopup.Visible = false 
+        
+        colorCallback = function(col, trans) 
+            colorBtn.BackgroundColor3 = col
+            callbackFunc(col, trans) 
+        end
+        
+        local tempH, tempS, tempV = colorBtn.BackgroundColor3:ToHSV()
+        h = tempH
+        v = tempS == 1 and tempV / 2 or 0.5 + ((1 - tempS) / 2)
+        a = 1 - currentAlpha
+        
+        huePick.Position = UDim2.new(h, 0, 0.5, 0)
+        valPick.Position = UDim2.new(v, 0, 0.5, 0)
+        alphaPick.Position = UDim2.new(a, 0, 0.5, 0)
+        alphaFill.Size = UDim2.new(a, 0, 1, 0)
+        
+        local mPos = UserInputService:GetMouseLocation()
+        colorPopup.Position = UDim2.new(0, mPos.X + 20, 0, mPos.Y - 50)
+        colorPopup.Visible = true
     end)
 end
 
-label("Combat", c1)
-toggle("Aimbot Enabled", active, c1, function(v) active = v end)
-slider("Smoothing", smooth, 0, 25, c1, function(v) smooth = v end)
-label("Field of View", c1)
-slider("Radius", size, 10, 600, c1, function(v) size = v end)
-toggle("Outline", o_on, c1, function(v) o_on = v end)
-color("Outline Color", o_clr, o_trans, c1, function(v, t) o_clr = v; o_trans = t end)
-toggle("Fill", f_on, c1, function(v) f_on = v end)
-color("Fill Color", f_clr, f_trans, c1, function(v, t) f_clr = v; f_trans = t end)
-label("Visuals", c1)
-toggle("Show Name", n_on, c1, function(v) n_on = v end)
-toggle("Show Health", h_on, c1, function(v) h_on = v end)
-toggle("Show Distance", d_on, c1, function(v) d_on = v end)
+createLabel("Combat", cCol1)
+createToggle("Aimbot Enabled", aimbotEnabled, cCol1, function(val) aimbotEnabled = val end)
+createSlider("Smoothing", aimSmooth, 0, 25, cCol1, function(val) aimSmooth = val end)
 
-label("Crosshair", c2)
-toggle("Crosshair Enabled", c_on, c2, function(v) c_on = v end)
-toggle("Center Dot", c_dot, c2, function(v) c_dot = v end)
-slider("Spokes", c_spokes, 2, 12, c2, function(v) c_spokes = v end)
-slider("Length", c_len, 1, 50, c2, function(v) c_len = v end)
-slider("Gap", c_gap, 0, 30, c2, function(v) c_gap = v end)
-slider("Width", c_wid, 1, 10, c2, function(v) c_wid = v end)
-slider("Spin Speed", c_spin, 0, 10, c2, function(v) c_spin = v end)
-color("Crosshair Color", c_clr, c_trans, c2, function(v, t) c_clr = v; c_trans = t end)
-toggle("Follow Target", c_fol, c2, function(v) c_fol = v end)
+createLabel("Field of View", cCol1)
+createSlider("Radius", fovRadius, 10, 600, cCol1, function(val) fovRadius = val end)
+createToggle("Outline", outlineOn, cCol1, function(val) outlineOn = val end)
+createColorPicker("Outline Color", outlineCol, outlineTrans, cCol1, function(col, trans) outlineCol = col; outlineTrans = trans end)
+createToggle("Fill", fillOn, cCol1, function(val) fillOn = val end)
+createColorPicker("Fill Color", fillCol, fillTrans, cCol1, function(col, trans) fillCol = col; fillTrans = trans end)
 
-label("Target Selector", c3)
-local rb = Instance.new("TextButton", c3); rb.Size = UDim2.new(1, -20, 0, 35); rb.BackgroundColor3 = Color3.fromRGB(35, 35, 35); rb.Font = "Code"; rb.TextColor3 = Color3.new(1,1,1); rb.LayoutOrder = idx + 1; round(rb)
-local rm = Instance.new("Frame", c3); rm.Size = UDim2.new(1, 0, 0, 480); rm.BackgroundTransparency = 1; rm.LayoutOrder = 100
-local r_btns = {}
+createLabel("Visuals", cCol1)
+createToggle("Show Name", showName, cCol1, function(val) showName = val end)
+createToggle("Show Health", showHealth, cCol1, function(val) showHealth = val end)
+createToggle("Show Distance", showDist, cCol1, function(val) showDist = val end)
 
-local function p_btn(n, p, s)
-    local b = Instance.new("TextButton", rm); b.Size = s; b.Position = p; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.Text = ""; b.BorderSizePixel = 0; round(b, 4)
-    b.MouseButton1Click:Connect(function() part = n end)
-    RunService.RenderStepped:Connect(function() if not b.Parent then return end b.BackgroundColor3 = part == n and Color3.fromRGB(255, 105, 180) or Color3.fromRGB(30, 30, 30) end)
-    table.insert(r_btns, b)
+createLabel("Crosshair", cCol2)
+createToggle("Crosshair Enabled", crossOn, cCol2, function(val) crossOn = val end)
+createToggle("Center Dot", crossDot, cCol2, function(val) crossDot = val end)
+createSlider("Spokes", crossSpokes, 2, 12, cCol2, function(val) crossSpokes = val end)
+createSlider("Length", crossLength, 1, 50, cCol2, function(val) crossLength = val end)
+createSlider("Gap", crossGap, 0, 30, cCol2, function(val) crossGap = val end)
+createSlider("Width", crossWidth, 1, 10, cCol2, function(val) crossWidth = val end)
+createSlider("Spin Speed", spinSpeed, 0, 10, cCol2, function(val) spinSpeed = val end)
+createColorPicker("Crosshair Color", crossCol, crossTrans, cCol2, function(col, trans) crossCol = col; crossTrans = trans end)
+createToggle("Follow Target", followTarget, cCol2, function(val) followTarget = val end)
+
+createLabel("Target Selector", cCol3)
+local rigSwapBtn = Instance.new("TextButton", cCol3)
+rigSwapBtn.Size = UDim2.new(1, -20, 0, 35)
+rigSwapBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+rigSwapBtn.Font = Enum.Font.Code
+rigSwapBtn.TextColor3 = Color3.new(1, 1, 1)
+rigSwapBtn.LayoutOrder = orderIndex + 1
+applyCorner(rigSwapBtn)
+
+local rigMap = Instance.new("Frame", cCol3)
+rigMap.Size = UDim2.new(1, 0, 0, 480)
+rigMap.BackgroundTransparency = 1
+rigMap.LayoutOrder = 100
+local rigBtns = {}
+
+local function createPartBtn(partName, pos, size)
+    local btn = Instance.new("TextButton", rigMap)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.Text = ""
+    btn.BorderSizePixel = 0
+    applyCorner(btn, 4)
+    
+    btn.MouseButton1Click:Connect(function() 
+        targetPart = partName 
+    end)
+    
+    RunService.RenderStepped:Connect(function() 
+        if not btn.Parent then return end 
+        btn.BackgroundColor3 = targetPart == partName and Color3.fromRGB(255, 105, 180) or Color3.fromRGB(30, 30, 30) 
+    end)
+    
+    table.insert(rigBtns, btn)
 end
 
-local function load_rig()
-    for _, b in pairs(r_btns) do b:Destroy() end; table.clear(r_btns)
-    if rig == "R15" then
-        rb.Text = "MODEL: R15 (CLICK TO SWAP)"
-        p_btn("Head", UDim2.new(0.5, -30, 0, 10), UDim2.new(0, 60, 0, 60))
-        p_btn("UpperTorso", UDim2.new(0.5, -60, 0, 75), UDim2.new(0, 120, 0, 80))
-        p_btn("LowerTorso", UDim2.new(0.5, -60, 0, 160), UDim2.new(0, 120, 0, 40))
-        p_btn("LeftUpperArm", UDim2.new(0.5, -115, 0, 75), UDim2.new(0, 50, 0, 125))
-        p_btn("RightUpperArm", UDim2.new(0.5, 65, 0, 75), UDim2.new(0, 50, 0, 125))
-        p_btn("LeftUpperLeg", UDim2.new(0.5, -55, 0, 205), UDim2.new(0, 50, 0, 130))
-        p_btn("RightUpperLeg", UDim2.new(0.5, 5, 0, 205), UDim2.new(0, 50, 0, 130))
+local function buildRigMenu()
+    for _, btn in pairs(rigBtns) do 
+        btn:Destroy() 
+    end
+    table.clear(rigBtns)
+    
+    if rigType == "R15" then
+        rigSwapBtn.Text = "MODEL: R15 (CLICK TO SWAP)"
+        createPartBtn("Head", UDim2.new(0.5, -30, 0, 10), UDim2.new(0, 60, 0, 60))
+        createPartBtn("UpperTorso", UDim2.new(0.5, -60, 0, 75), UDim2.new(0, 120, 0, 80))
+        createPartBtn("LowerTorso", UDim2.new(0.5, -60, 0, 160), UDim2.new(0, 120, 0, 40))
+        createPartBtn("LeftUpperArm", UDim2.new(0.5, -115, 0, 75), UDim2.new(0, 50, 0, 125))
+        createPartBtn("RightUpperArm", UDim2.new(0.5, 65, 0, 75), UDim2.new(0, 50, 0, 125))
+        createPartBtn("LeftUpperLeg", UDim2.new(0.5, -55, 0, 205), UDim2.new(0, 50, 0, 130))
+        createPartBtn("RightUpperLeg", UDim2.new(0.5, 5, 0, 205), UDim2.new(0, 50, 0, 130))
     else
-        rb.Text = "MODEL: R6 (CLICK TO SWAP)"
-        p_btn("Head", UDim2.new(0.5, -35, 0, 10), UDim2.new(0, 70, 0, 70))
-        p_btn("Torso", UDim2.new(0.5, -65, 0, 85), UDim2.new(0, 130, 0, 150))
-        p_btn("Left Arm", UDim2.new(0.5, -135, 0, 85), UDim2.new(0, 65, 0, 150))
-        p_btn("Right Arm", UDim2.new(0.5, 70, 0, 85), UDim2.new(0, 65, 0, 150))
-        p_btn("Left Leg", UDim2.new(0.5, -65, 0, 240), UDim2.new(0, 60, 0, 150))
-        p_btn("Right Leg", UDim2.new(0.5, 5, 0, 240), UDim2.new(0, 60, 0, 150))
+        rigSwapBtn.Text = "MODEL: R6 (CLICK TO SWAP)"
+        createPartBtn("Head", UDim2.new(0.5, -35, 0, 10), UDim2.new(0, 70, 0, 70))
+        createPartBtn("Torso", UDim2.new(0.5, -65, 0, 85), UDim2.new(0, 130, 0, 150))
+        createPartBtn("Left Arm", UDim2.new(0.5, -135, 0, 85), UDim2.new(0, 65, 0, 150))
+        createPartBtn("Right Arm", UDim2.new(0.5, 70, 0, 85), UDim2.new(0, 65, 0, 150))
+        createPartBtn("Left Leg", UDim2.new(0.5, -65, 0, 240), UDim2.new(0, 60, 0, 150))
+        createPartBtn("Right Leg", UDim2.new(0.5, 5, 0, 240), UDim2.new(0, 60, 0, 150))
     end
 end
-rb.MouseButton1Click:Connect(function() rig = (rig == "R15" and "R6" or "R15"); part = "Head"; load_rig() end); load_rig()
 
-label("Chams", vc1)
-toggle("Chams Enabled", ch_on, vc1, function(v) ch_on = v end)
-toggle("Occluded", ch_occ, vc1, function(v) ch_occ = v end)
-color("Fill Color", ch_f_clr, ch_f_trans, vc1, function(v, t) ch_f_clr = v; ch_f_trans = t end)
-color("Outline Color", ch_o_clr, ch_o_trans, vc1, function(v, t) ch_o_clr = v; ch_o_trans = t end)
-label("ESP", vc1)
-toggle("ESP Enabled", e_on, vc1, function(v) e_on = v end)
-toggle("Boxes", e_box, vc1, function(v) e_box = v end)
-toggle("Health Bar", e_health, vc1, function(v) e_health = v end)
-color("ESP Color", e_clr, 0, vc1, function(v, t) e_clr = v end)
+rigSwapBtn.MouseButton1Click:Connect(function() 
+    rigType = rigType == "R15" and "R6" or "R15"
+    targetPart = "Head"
+    buildRigMenu() 
+end)
+buildRigMenu()
 
-local function make_esp(p)
-    local b = Drawing.new("Square"); b.Thickness = 1; b.Filled = false
-    local h_bg = Drawing.new("Line"); h_bg.Thickness = 2; h_bg.Color = Color3.new(0,0,0)
-    local h_br = Drawing.new("Line"); h_br.Thickness = 2
-    esp[p] = {Box = b, Health = h_br, HealthBack = h_bg}
+createLabel("Chams", vCol1)
+createToggle("Chams Enabled", chamsOn, vCol1, function(val) chamsOn = val end)
+createToggle("Occluded", occludeChams, vCol1, function(val) occludeChams = val end)
+createColorPicker("Fill Color", chamsFill, chamsFillTrans, vCol1, function(col, trans) chamsFill = col; chamsFillTrans = trans end)
+createColorPicker("Outline Color", chamsOutline, chamsOutlineTrans, vCol1, function(col, trans) chamsOutline = col; chamsOutlineTrans = trans end)
+
+createLabel("ESP", vCol1)
+createToggle("ESP Enabled", espOn, vCol1, function(val) espOn = val end)
+createToggle("Boxes", espBox, vCol1, function(val) espBox = val end)
+createToggle("Health Bar", espHealthBar, vCol1, function(val) espHealthBar = val end)
+createColorPicker("ESP Color", espCol, 0, vCol1, function(col, trans) espCol = col end)
+
+local function setupEsp(playerObj)
+    local boxFrame = Drawing.new("Square")
+    boxFrame.Thickness = 1
+    boxFrame.Filled = false
+    
+    local hBack = Drawing.new("Line")
+    hBack.Thickness = 2
+    hBack.Color = Color3.new(0, 0, 0)
+    
+    local hFill = Drawing.new("Line")
+    hFill.Thickness = 2
+    
+    espCache[playerObj] = {Box = boxFrame, Health = hFill, HealthBack = hBack}
 end
 
 RunService.RenderStepped:Connect(function()
-    if not menu_up then return end
-    local m_pos = UserInputService:GetMouseLocation()
-    local target, dist = nil, size
+    if not menuOpen then return end
+    
+    local mPos = UserInputService:GetMouseLocation()
+    local lockedTarget = nil
+    local bestDist = fovRadius
 
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= lp and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            if p.Character:FindFirstChild(part) and hum and hum.Health > 0 then
-                local s_pos, vis = camera:WorldToViewportPoint(p.Character[part].Position)
-                if vis then
-                    local m = (Vector2.new(s_pos.X, s_pos.Y) - m_pos).Magnitude
-                    if m < dist then dist = m; target = p.Character[part] end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= localPlayer and plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            
+            if plr.Character:FindFirstChild(targetPart) and hum and hum.Health > 0 then
+                local screenPos, isOnScreen = cam:WorldToViewportPoint(plr.Character[targetPart].Position)
+                
+                if isOnScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mPos).Magnitude
+                    if dist < bestDist then 
+                        bestDist = dist
+                        lockedTarget = plr.Character[targetPart] 
+                    end
                 end
             end
-            local hl = chams:FindFirstChild(p.Name)
-            if ch_on then
-                if not hl then hl = Instance.new("Highlight", chams); hl.Name = p.Name end
-                hl.Adornee = p.Character; hl.FillColor = ch_f_clr; hl.FillTransparency = ch_f_trans; hl.OutlineColor = ch_o_clr; hl.OutlineTransparency = ch_o_trans; hl.DepthMode = ch_occ and 1 or 0
-            elseif hl then hl:Destroy() end
-            if not esp[p] then make_esp(p) end
-            local d = esp[p]
-            if hrp and hum and hum.Health > 0 and e_on then
-                local pos, vis = camera:WorldToViewportPoint(hrp.Position)
-                if vis then
-                    local sy = (camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0)).Y - camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.8, 0)).Y)
-                    local sx = sy / 1.8
-                    d.Box.Visible = e_box; d.Box.Size = Vector2.new(sx, sy); d.Box.Position = Vector2.new(pos.X - sx/2, pos.Y - sy/2); d.Box.Color = e_clr
-                    if e_health then
-                        d.HealthBack.Visible = true; d.HealthBack.From = Vector2.new(pos.X-sx/2-4, pos.Y+sy/2); d.HealthBack.To = Vector2.new(pos.X-sx/2-4, pos.Y-sy/2)
-                        d.Health.Visible = true; d.Health.From = Vector2.new(pos.X-sx/2-4, pos.Y+sy/2); d.Health.To = Vector2.new(pos.X-sx/2-4, (pos.Y+sy/2)-(sy*(hum.Health/hum.MaxHealth))); d.Health.Color = Color3.new(1,0,0):Lerp(Color3.new(0,1,0), hum.Health/hum.MaxHealth)
-                    else d.Health.Visible = false; d.HealthBack.Visible = false end
-                else d.Box.Visible = false; d.Health.Visible = false; d.HealthBack.Visible = false end
-            else d.Box.Visible = false; d.Health.Visible = false; d.HealthBack.Visible = false end
+            
+            local activeCham = chamsFolder:FindFirstChild(plr.Name)
+            if chamsOn then
+                if not activeCham then 
+                    activeCham = Instance.new("Highlight", chamsFolder)
+                    activeCham.Name = plr.Name 
+                end
+                activeCham.Adornee = plr.Character
+                activeCham.FillColor = chamsFill
+                activeCham.FillTransparency = chamsFillTrans
+                activeCham.OutlineColor = chamsOutline
+                activeCham.OutlineTransparency = chamsOutlineTrans
+                activeCham.DepthMode = occludeChams and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+            elseif activeCham then 
+                activeCham:Destroy() 
+            end
+            
+            if not espCache[plr] then 
+                setupEsp(plr) 
+            end
+            
+            local espDraws = espCache[plr]
+            if hrp and hum and hum.Health > 0 and espOn then
+                local rootScreen, rootVis = cam:WorldToViewportPoint(hrp.Position)
+                
+                if rootVis then
+                    local topPos = cam:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2.8, 0))
+                    local botPos = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0))
+                    local sizeY = botPos.Y - topPos.Y
+                    local sizeX = sizeY / 1.8
+                    
+                    espDraws.Box.Visible = espBox
+                    espDraws.Box.Size = Vector2.new(sizeX, sizeY)
+                    espDraws.Box.Position = Vector2.new(rootScreen.X - sizeX / 2, rootScreen.Y - sizeY / 2)
+                    espDraws.Box.Color = espCol
+                    
+                    if espHealthBar then
+                        espDraws.HealthBack.Visible = true
+                        espDraws.HealthBack.From = Vector2.new(rootScreen.X - sizeX / 2 - 4, rootScreen.Y + sizeY / 2)
+                        espDraws.HealthBack.To = Vector2.new(rootScreen.X - sizeX / 2 - 4, rootScreen.Y - sizeY / 2)
+                        
+                        espDraws.Health.Visible = true
+                        espDraws.Health.From = Vector2.new(rootScreen.X - sizeX / 2 - 4, rootScreen.Y + sizeY / 2)
+                        local healthPerc = hum.Health / hum.MaxHealth
+                        espDraws.Health.To = Vector2.new(rootScreen.X - sizeX / 2 - 4, (rootScreen.Y + sizeY / 2) - (sizeY * healthPerc))
+                        espDraws.Health.Color = Color3.new(1, 0, 0):Lerp(Color3.new(0, 1, 0), healthPerc)
+                    else 
+                        espDraws.Health.Visible = false
+                        espDraws.HealthBack.Visible = false 
+                    end
+                else 
+                    espDraws.Box.Visible = false
+                    espDraws.Health.Visible = false
+                    espDraws.HealthBack.Visible = false 
+                end
+            else 
+                espDraws.Box.Visible = false
+                espDraws.Health.Visible = false
+                espDraws.HealthBack.Visible = false 
+            end
         end
     end
 
-    circ.Position = m_pos; circ.Radius = size; circ.Visible = o_on; circ.Color = o_clr; circ.Transparency = 1-o_trans
-    fill.Position = m_pos; fill.Radius = size; fill.Visible = f_on; fill.Color = f_clr; fill.Transparency = 1-f_trans
-    if target and (n_on or h_on or d_on) then
-        local s = ""; if n_on then s = s..target.Parent.Name.."\n" end
-        if h_on then s = s.."HP: "..math.floor(target.Parent:FindFirstChildOfClass("Humanoid").Health).."\n" end
-        if d_on then s = s..math.floor((lp.Character.Head.Position - target.Position).Magnitude).."m" end
-        text.Visible = true; text.Text = s; text.Position = m_pos + Vector2.new(0, size + 10)
-    else text.Visible = false end
+    fovOutline.Position = mPos
+    fovOutline.Radius = fovRadius
+    fovOutline.Visible = outlineOn
+    fovOutline.Color = outlineCol
+    fovOutline.Transparency = 1 - outlineTrans
+    
+    fovFill.Position = mPos
+    fovFill.Radius = fovRadius
+    fovFill.Visible = fillOn
+    fovFill.Color = fillCol
+    fovFill.Transparency = 1 - fillTrans
 
-    kill_lines()
-    if c_on then
-        local mid = m_pos; if c_fol and target then local p = camera:WorldToViewportPoint(target.Position); mid = Vector2.new(p.X, p.Y) end
-        dot.Visible = c_dot; dot.Position = mid; dot.Color = c_clr; dot.Radius = c_wid; dot.Transparency = 1-c_trans
-        step = step + ((c_spin^2)/400)
-        for i = 1, c_spokes do
-            local a = ((i-1)*(math.pi*2/c_spokes))+step; local d = Vector2.new(math.cos(a), math.sin(a))
-            local l = Drawing.new("Line"); l.Visible = true; l.From = mid+(d*c_gap); l.To = mid+(d*(c_gap+c_len)); l.Thickness = c_wid; l.Color = c_clr; l.Transparency = 1-c_trans; table.insert(c_lines, l)
+    if lockedTarget and (showName or showHealth or showDist) then
+        local str = ""
+        if showName then str = str .. lockedTarget.Parent.Name .. "\n" end
+        if showHealth then str = str .. "HP: " .. math.floor(lockedTarget.Parent:FindFirstChildOfClass("Humanoid").Health) .. "\n" end
+        if showDist then str = str .. math.floor((localPlayer.Character.Head.Position - lockedTarget.Position).Magnitude) .. "m" end
+        
+        targetText.Visible = true
+        targetText.Text = str
+        targetText.Position = mPos + Vector2.new(0, fovRadius + 10)
+    else 
+        targetText.Visible = false 
+    end
+
+    clearLines()
+    if crossOn then
+        local midPoint = mPos
+        if followTarget and lockedTarget then 
+            local tPos = cam:WorldToViewportPoint(lockedTarget.Position)
+            midPoint = Vector2.new(tPos.X, tPos.Y) 
         end
-    else dot.Visible = false end
+        
+        centerDot.Visible = crossDot
+        centerDot.Position = midPoint
+        centerDot.Color = crossCol
+        centerDot.Radius = crossWidth
+        centerDot.Transparency = 1 - crossTrans
+        
+        spinStep = spinStep + ((spinSpeed^2) / 400)
+        
+        for i = 1, crossSpokes do
+            local angle = ((i - 1) * (math.pi * 2 / crossSpokes)) + spinStep
+            local dir = Vector2.new(math.cos(angle), math.sin(angle))
+            local cLine = Drawing.new("Line")
+            
+            cLine.Visible = true
+            cLine.From = midPoint + (dir * crossGap)
+            cLine.To = midPoint + (dir * (crossGap + crossLength))
+            cLine.Thickness = crossWidth
+            cLine.Color = crossCol
+            cLine.Transparency = 1 - crossTrans
+            
+            table.insert(crosshairLines, cLine)
+        end
+    else 
+        centerDot.Visible = false 
+    end
 
-    if UserInputService:IsMouseButtonPressed(key) and active and target then
-        camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(camera.CFrame.Position, target.Position), 1/(smooth+1))
+    if UserInputService:IsMouseButtonPressed(aimKey) and aimbotEnabled and lockedTarget then
+        cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, lockedTarget.Position), 1 / (aimSmooth + 1))
     end
 end)
 
-UserInputService.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Enum.KeyCode.Delete then main.Visible = not main.Visible; if not main.Visible then cp.Visible = false end end end)
-local ex = Instance.new("TextButton", main); ex.Size = UDim2.new(0, 120, 0, 35); ex.Position = UDim2.new(1, -130, 1, -45); ex.BackgroundColor3 = Color3.fromRGB(60, 20, 20); ex.Font = "Code"; ex.TextColor3 = Color3.new(1, 0.5, 0.5); ex.Text = "UNLOAD"; round(ex)
-ex.MouseButton1Click:Connect(function() menu_up = false; chams:Destroy(); gui:Destroy(); pgui:Destroy(); circ:Remove(); fill:Remove(); text:Remove(); dot:Remove(); kill_lines(); for _, d in pairs(esp) do d.Box:Remove(); d.Health:Remove(); d.HealthBack:Remove() end end)
+UserInputService.InputBegan:Connect(function(input, gameProcessed) 
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.Delete then 
+        mainFrame.Visible = not mainFrame.Visible
+        if not mainFrame.Visible then 
+            colorPopup.Visible = false 
+        end
+    end 
+end)
+
+local unloadAction = Instance.new("TextButton", mainFrame)
+unloadAction.Size = UDim2.new(0, 120, 0, 35)
+unloadAction.Position = UDim2.new(1, -130, 1, -45)
+unloadAction.BackgroundColor3 = Color3.fromRGB(60, 20, 20)
+unloadAction.Font = Enum.Font.Code
+unloadAction.TextColor3 = Color3.new(1, 0.5, 0.5)
+unloadAction.Text = "UNLOAD"
+applyCorner(unloadAction)
+
+unloadAction.MouseButton1Click:Connect(function() 
+    menuOpen = false
+    chamsFolder:Destroy()
+    mainGui:Destroy()
+    popupGui:Destroy()
+    fovOutline:Remove()
+    fovFill:Remove()
+    targetText:Remove()
+    centerDot:Remove()
+    clearLines() 
+    
+    for _, cache in pairs(espCache) do 
+        cache.Box:Remove()
+        cache.Health:Remove()
+        cache.HealthBack:Remove() 
+    end 
+end)
