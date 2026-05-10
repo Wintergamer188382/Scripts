@@ -1,0 +1,594 @@
+import discord
+import datetime
+import asyncio
+import aiohttp
+import re
+import random
+
+# --- CONFIGURATION ---
+TARGET_USER_ID_1 = 1404976511949344798
+REACTION_EMOJI_1 = '💗'
+
+TARGET_USER_ID_2 = 1305671431408976041
+REACTION_EMOJI_2 = '🏳️‍🌈'
+
+MONITOR_USER_ID = 1404976511949344798
+YOUR_USER_ID    = 879110873346605076
+LOG_CHANNEL_ID  = 1502899464434618408
+
+TOKEN = 'MTM5MDc1NDc0MzEwMTY4NTgzMQ.G9xllq.0nu47k_pCP6pt77cIslQ4OaFjoZTJ6i4KI0XC0'
+# ---------------------
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.presences = True
+intents.members = True
+
+client = discord.Client(intents=intents)
+
+count_1 = 0
+count_2 = 0
+
+# ── Paged help ────────────────────────────────────────────────────────────────
+HELP_PAGES = [
+    {
+        "title": "📋 Commands — Page 1/4 · Info & Server",
+        "color": discord.Color.blurple(),
+        "fields": [
+            (".pfp [@user]",    "Show a user's avatar"),
+            (".banner [@user]", "Show a user's banner"),
+            (".info [@user]",   "Show user info & roles"),
+            (".server",         "Show server stats"),
+            (".steal <emoji>",  "Steal a custom emoji"),
+            (".clear [num]",    "Bulk delete messages (default 5)"),
+        ],
+    },
+    {
+        "title": "🎮 Commands — Page 2/4 · Fun & Games",
+        "color": discord.Color.green(),
+        "fields": [
+            (".snap [@user] [limit]",    "Pull a random old message from a user"),
+            (".mock [text]",             "sPoNgEbOb MoCk a message"),
+            (".ship [@user1] [@user2]",  "Check compatibility 💘"),
+            (".pp [@user]",              "Very important measurement"),
+            (".compliment [@user]",      "Send someone a compliment 🌸"),
+            (".rate [@user]",            "Get a totally legit rating"),
+        ],
+    },
+    {
+        "title": "✨ Commands — Page 3/4 · Social & Vibes",
+        "color": discord.Color.from_rgb(255, 105, 180),
+        "fields": [
+            (".hug [@user]",   "Send a hug gif 🤗"),
+            (".slap [@user]",  "Send a slap gif 💢"),
+            (".simp [@user]",  "Rate how much of a simp someone is 💘"),
+            (".rizz [@user]",  "Give someone a rizz line 🗣️"),
+            (".colour [#hex]", "Preview a hex colour with RGB info 🎨"),
+        ],
+    },
+    {
+        "title": "🔤 Commands — Page 4/4 · Text Tools",
+        "color": discord.Color.orange(),
+        "fields": [
+            (".reverse [text]", "Reverse any text"),
+            (".clap [text]",    "Add 👏 between 👏 every 👏 word"),
+            (".uwu [text]",     "uwuify any text OwO"),
+            (".urban [word]",   "Look up a word on Urban Dictionary"),
+        ],
+    },
+]
+
+def build_help_embed(page: int) -> discord.Embed:
+    data  = HELP_PAGES[page]
+    embed = discord.Embed(title=data["title"], color=data["color"])
+    for name, value in data["fields"]:
+        embed.add_field(name=f"`{name}`", value=value, inline=False)
+    embed.set_footer(text=f"Page {page + 1}/{len(HELP_PAGES)} • react ◀ ▶ to flip")
+    return embed
+
+# message_id -> {page, user_id}
+help_sessions: dict[int, dict] = {}
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+async def fetch_image_bytes(url: str) -> bytes:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                raise Exception(f"HTTP {resp.status}")
+            return await resp.read()
+
+async def fetch_gif(tag: str) -> str | None:
+    """Return a random Tenor gif URL for the given search tag."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://g.tenor.com/v1/search?q={tag}&key=LIVDSRZULELA&limit=20&contentfilter=medium"
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                data    = await resp.json()
+                results = data.get("results", [])
+                if not results:
+                    return None
+                return random.choice(results)["media"][0]["gif"]["url"]
+    except Exception:
+        return None
+
+# ── Events ────────────────────────────────────────────────────────────────────
+@client.event
+async def on_ready():
+    print(f'Logged in as {client.user} — bot is active!')
+
+@client.event
+async def on_presence_update(before, after):
+    if after.id != MONITOR_USER_ID:
+        return
+    channel = client.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        return
+
+    # Status change
+    if before.status != after.status:
+        is_offline = after.status == discord.Status.offline
+        emb = discord.Embed(
+            title="Status Update",
+            description=f"**{after.name}** is now **{str(after.status).upper()}**",
+            color=discord.Color.red() if is_offline else discord.Color.green(),
+        )
+        emb.set_author(name=after.name, icon_url=after.display_avatar.url)
+        msg = await channel.send(content=f"<@{YOUR_USER_ID}>", embed=emb)
+        await msg.add_reaction('💔' if is_offline else '💗')
+
+    # Spotify
+    spotify  = discord.utils.get(after.activities,  type=discord.ActivityType.listening)
+    old_spot = discord.utils.get(before.activities, type=discord.ActivityType.listening)
+    if spotify and spotify != old_spot:
+        track_url = f"https://open.spotify.com/track/{spotify.track_id}"
+        emb = discord.Embed(
+            description=f"Listening to **[{spotify.title}]({track_url})**\nby **{spotify.artist}**",
+            color=discord.Color.from_rgb(30, 215, 96),
+        )
+        emb.set_author(name=after.name, icon_url=after.display_avatar.url)
+        if spotify.album_cover_url:
+            emb.set_thumbnail(url=spotify.album_cover_url)
+        emb.set_footer(text=f"Album: {spotify.album} | {datetime.datetime.now().strftime('%I:%M:%S %p • %d/%m/%Y')}")
+        msg = await channel.send(content=f"<@{YOUR_USER_ID}>", embed=emb)
+        await msg.add_reaction('💗')
+
+@client.event
+async def on_reaction_add(reaction, user):
+    if user.bot:
+        return
+    session = help_sessions.get(reaction.message.id)
+    if not session or user.id != session["user_id"]:
+        return
+
+    page  = session["page"]
+    emoji = str(reaction.emoji)
+
+    if   emoji == '▶' and page < len(HELP_PAGES) - 1:
+        page += 1
+    elif emoji == '◀' and page > 0:
+        page -= 1
+    else:
+        return
+
+    session["page"] = page
+    await reaction.message.edit(embed=build_help_embed(page))
+    try:
+        await reaction.remove(user)
+    except discord.Forbidden:
+        pass
+
+@client.event
+async def on_message(message):
+    global count_1, count_2
+    if message.author == client.user:
+        return
+
+    content = message.content.strip()
+
+    # ── .help ─────────────────────────────────────────────────────────────────
+    if content.startswith(".help"):
+        sent = await message.channel.send(embed=build_help_embed(0))
+        help_sessions[sent.id] = {"page": 0, "user_id": message.author.id}
+        await sent.add_reaction('◀')
+        await sent.add_reaction('▶')
+
+    # ── .pfp ──────────────────────────────────────────────────────────────────
+    elif content.startswith(".pfp"):
+        user  = message.mentions[0] if message.mentions else message.author
+        embed = discord.Embed(title=f"{user.name}'s Avatar", color=discord.Color.blurple())
+        embed.set_image(url=user.display_avatar.url)
+        await message.channel.send(embed=embed)
+
+    # ── .banner ───────────────────────────────────────────────────────────────
+    elif content.startswith(".banner"):
+        user = message.mentions[0] if message.mentions else message.author
+        user = await client.fetch_user(user.id)
+        if user.banner:
+            embed = discord.Embed(title=f"{user.name}'s Banner", color=discord.Color.blurple())
+            embed.set_image(url=user.banner.url)
+            await message.channel.send(embed=embed)
+        else:
+            await message.channel.send(f"**{user.name}** has no banner set.")
+
+    # ── .steal ────────────────────────────────────────────────────────────────
+    elif content.startswith(".steal"):
+        if not message.guild:
+            return await message.channel.send("This command only works in a server.")
+        if not message.author.guild_permissions.manage_expressions:
+            return await message.channel.send("You need **Manage Emojis** permission.")
+        parts = content.split()
+        if len(parts) < 2:
+            return await message.channel.send("Usage: `.steal <emoji>`")
+        match = re.match(r'<(a?):(\w+):(\d+)>', parts[1])
+        if not match:
+            return await message.channel.send("I can only steal custom server emojis.")
+        animated, emoji_name, emoji_id = match.group(1) == 'a', match.group(2), match.group(3)
+        cdn_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{'gif' if animated else 'png'}?quality=lossless"
+        try:
+            new_emoji = await message.guild.create_custom_emoji(
+                name=emoji_name, image=await fetch_image_bytes(cdn_url)
+            )
+            await message.channel.send(f"Stolen! {new_emoji}")
+        except discord.Forbidden:
+            await message.channel.send("I don't have permission to add emojis here.")
+        except discord.HTTPException as e:
+            await message.channel.send(f"Discord rejected it: {e}")
+        except Exception as e:
+            await message.channel.send(f"Something went wrong: {e}")
+
+    # ── .clear / .purge ───────────────────────────────────────────────────────
+    elif content.startswith(".clear") or content.startswith(".purge"):
+        if not message.author.guild_permissions.manage_messages:
+            return await message.channel.send("You need **Manage Messages** permission.")
+        parts = content.split()
+        try:
+            num = int(parts[1]) + 1 if len(parts) > 1 else 6
+        except ValueError:
+            return await message.channel.send("Example: `.clear 10`")
+        await message.channel.purge(limit=num)
+
+    # ── .info ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".info"):
+        user  = message.mentions[0] if message.mentions else message.author
+        embed = discord.Embed(title=f"User Info — {user.name}", color=user.color)
+        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.add_field(name="ID",             value=user.id,                              inline=False)
+        embed.add_field(name="Joined Discord", value=user.created_at.strftime("%b %d, %Y"), inline=True)
+        if isinstance(user, discord.Member):
+            roles     = [r.mention for r in user.roles if r != message.guild.default_role]
+            embed.add_field(name="Joined Server",          value=user.joined_at.strftime("%b %d, %Y"), inline=True)
+            embed.add_field(name=f"Roles [{len(roles)}]",  value=", ".join(roles) or "No roles",       inline=False)
+        await message.channel.send(embed=embed)
+
+    # ── .server ───────────────────────────────────────────────────────────────
+    elif content.startswith(".server"):
+        guild = message.guild
+        if not guild:
+            return await message.channel.send("This command only works in a server.")
+        embed = discord.Embed(title=f"Server Stats — {guild.name}", color=discord.Color.gold())
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        embed.add_field(name="Members",    value=guild.member_count,                    inline=True)
+        embed.add_field(name="Channels",   value=len(guild.channels),                   inline=True)
+        embed.add_field(name="Roles",      value=len(guild.roles),                      inline=True)
+        embed.add_field(name="Created On", value=guild.created_at.strftime("%b %d, %Y"), inline=False)
+        await message.channel.send(embed=embed)
+
+    # ── .snap ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".snap"):
+        user  = message.mentions[0] if message.mentions else message.author
+        parts = content.split()
+        limit = 500
+        for p in parts[1:]:
+            if p.isdigit():
+                limit = max(100, min(int(p), 1000))
+                break
+        try:
+            pool = [
+                m async for m in message.channel.history(limit=limit)
+                if m.author.id == user.id and m.content and not m.content.startswith('.')
+            ]
+            if not pool:
+                return await message.channel.send(
+                    f"No messages found from **{user.display_name}** in the last {limit}."
+                )
+            picked = random.choice(pool)
+            embed  = discord.Embed(
+                description=f'"{picked.content}"',
+                color=discord.Color.blurple(),
+                timestamp=picked.created_at,
+            )
+            embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
+            embed.set_footer(text=f"Searched {limit} messages • #{picked.channel.name}")
+            await message.channel.send(embed=embed)
+        except Exception as e:
+            await message.channel.send(f"Something went wrong: {e}")
+
+    # ── .mock ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".mock"):
+        text = content[5:].strip()
+        if not text and message.reference:
+            try:
+                text = (await message.channel.fetch_message(message.reference.message_id)).content
+            except Exception:
+                pass
+        if not text:
+            return await message.channel.send("Usage: `.mock [text]` or reply to a message.")
+        await message.channel.send(''.join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(text)))
+
+    # ── .ship ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".ship"):
+        RIGGED = {879110873346605076, 1404976511949344798}
+        if len(message.mentions) >= 2:
+            u1, u2 = message.mentions[0], message.mentions[1]
+        elif len(message.mentions) == 1:
+            u1, u2 = message.author, message.mentions[0]
+        else:
+            return await message.channel.send("Usage: `.ship @user1 @user2` or `.ship @user`")
+
+        if {u1.id, u2.id} == RIGGED:
+            score = 100
+        else:
+            random.seed(min(u1.id, u2.id) + max(u1.id, u2.id))
+            score = random.randint(0, 100)
+            random.seed()
+
+        bar     = '💗' * round(score / 10) + '🖤' * (10 - round(score / 10))
+        verdict = (
+            "soulmates 💍"                  if score == 100 else
+            "basically dating 😍"           if score >= 80  else
+            "there's something there 👀"    if score >= 60  else
+            "it's complicated 😅"           if score >= 40  else
+            "not feeling it 💀"             if score >= 20  else
+            "absolutely not 💔"
+        )
+        ship_name = u1.display_name[:len(u1.display_name)//2] + u2.display_name[len(u2.display_name)//2:]
+        embed = discord.Embed(title=f"💘 {ship_name}", color=discord.Color.from_rgb(255, 105, 180))
+        embed.add_field(name="Match",              value=f"{u1.mention} + {u2.mention}", inline=False)
+        embed.add_field(name=f"{score}% — {verdict}", value=bar,                        inline=False)
+        await message.channel.send(embed=embed)
+
+    # ── .pp ───────────────────────────────────────────────────────────────────
+    elif content.startswith(".pp"):
+        user = message.mentions[0] if message.mentions else message.author
+        random.seed(user.id)
+        size = random.randint(0, 12)
+        random.seed()
+        embed = discord.Embed(
+            description=f"**{user.display_name}'s**\n{'8' + '=' * size + 'D'} *(+{size} cm)*",
+            color=discord.Color.blurple(),
+        )
+        await message.channel.send(embed=embed)
+
+    # ── .compliment ───────────────────────────────────────────────────────────
+    elif content.startswith(".compliment"):
+        user = message.mentions[0] if message.mentions else message.author
+        lines = [
+            "is genuinely one of the most thoughtful people around 🌸",
+            "has the best energy and everyone notices it ✨",
+            "could make anyone's day better just by showing up 💖",
+            "is lowkey one of the most impressive people in this server 👑",
+            "has a smile that could end wars 😌",
+            "is the kind of person people write songs about 🎵",
+            "radiates main character energy and deserves every good thing 💫",
+            "is so real for that and we don't appreciate them enough 🙏",
+            "is built different in the best way possible 🌟",
+            "gives off the warmest vibes and the server is better for it 🔥",
+        ]
+        embed = discord.Embed(
+            description=f"{user.mention} {random.choice(lines)}",
+            color=discord.Color.from_rgb(255, 182, 193),
+        )
+        embed.set_author(name="compliment machine 🌸", icon_url=user.display_avatar.url)
+        await message.channel.send(embed=embed)
+
+    # ── .rate ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".rate"):
+        user = message.mentions[0] if message.mentions else message.author
+        random.seed(user.id + 999)
+        score = round(random.uniform(4.0, 10.0), 1)
+        random.seed()
+        verdict = (
+            "basically perfect, don't change a thing 💅" if score >= 9.5 else
+            "genuinely impressive, carry on 👑"          if score >= 8.0 else
+            "solid, room to grow 📈"                     if score >= 6.5 else
+            "mid but redeemable 🤷"                      if score >= 5.0 else
+            "needs work but we believe in you 💀"
+        )
+        embed = discord.Embed(
+            description=f"**{user.display_name}** gets a **{score}/10**\n{'⭐' * round(score / 2)}\n*{verdict}*",
+            color=discord.Color.gold(),
+        )
+        await message.channel.send(embed=embed)
+
+    # ── .hug ──────────────────────────────────────────────────────────────────
+    elif content.startswith(".hug"):
+        target  = message.mentions[0] if message.mentions else None
+        gif_url = await fetch_gif("anime hug")
+        desc    = (
+            f"{message.author.mention} gives {target.mention} the biggest hug 🤗"
+            if target else
+            f"{message.author.mention} needs a hug 🤗 someone get them"
+        )
+        embed = discord.Embed(description=desc, color=discord.Color.from_rgb(255, 200, 100))
+        if gif_url:
+            embed.set_image(url=gif_url)
+        await message.channel.send(embed=embed)
+
+    # ── .slap ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".slap"):
+        target  = message.mentions[0] if message.mentions else None
+        gif_url = await fetch_gif("anime slap")
+        desc    = (
+            f"{message.author.mention} slaps {target.mention} 💢"
+            if target else
+            f"{message.author.mention} slaps the air aggressively 💢"
+        )
+        embed = discord.Embed(description=desc, color=discord.Color.from_rgb(255, 80, 80))
+        if gif_url:
+            embed.set_image(url=gif_url)
+        await message.channel.send(embed=embed)
+
+    # ── .simp ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".simp"):
+        if len(message.mentions) >= 2:
+            simper, target = message.mentions[0], message.mentions[1]
+        elif len(message.mentions) == 1:
+            simper, target = message.author, message.mentions[0]
+        else:
+            return await message.channel.send("Usage: `.simp @user` or `.simp @user1 @user2`")
+
+        random.seed(simper.id + target.id)
+        score = random.randint(0, 100)
+        random.seed()
+
+        bar     = '💘' * round(score / 10) + '🖤' * (10 - round(score / 10))
+        verdict = (
+            "full send, certified simp lord 👑" if score == 100 else
+            "chronically down bad 😔"           if score >= 80  else
+            "pretty simpy ngl 👀"               if score >= 60  else
+            "a little bit but manageable"       if score >= 40  else
+            "barely, keep it that way"          if score >= 20  else
+            "not a simp at all, respect 💪"
+        )
+        embed = discord.Embed(title="💘 Simp Meter", color=discord.Color.from_rgb(255, 105, 180))
+        embed.add_field(name="Subject",               value=f"{simper.mention} → {target.mention}", inline=False)
+        embed.add_field(name=f"{score}% — {verdict}", value=bar,                                    inline=False)
+        await message.channel.send(embed=embed)
+
+    # ── .rizz ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".rizz"):
+        target = message.mentions[0] if message.mentions else None
+        lines  = [
+            "Are you a magician? Because every time I look at you, everyone else disappears.",
+            "I must be a snowflake because I've fallen for you.",
+            "Do you have a map? I keep getting lost in your eyes.",
+            "Are you a parking ticket? Because you've got 'fine' written all over you.",
+            "Is your name Google? Because you have everything I've been searching for.",
+            "You must be made of copper and tellurium because you're CuTe.",
+            "If you were a vegetable you'd be a cute-cumber.",
+            "I'm not a photographer but I can definitely picture us together.",
+            "Are you wi-fi? Because I'm feeling a connection.",
+            "You must be a star because the universe revolves around you.",
+            "Do you believe in love at first sight or should I walk by again?",
+            "If looks could kill, you'd definitely be a weapon of mass destruction.",
+        ]
+        desc = (
+            f"{message.author.mention} → {target.mention}\n\n*\"{random.choice(lines)}\"*"
+            if target else
+            f"*\"{random.choice(lines)}\"*"
+        )
+        embed = discord.Embed(description=desc, color=discord.Color.from_rgb(255, 150, 50))
+        embed.set_footer(text="🗣️ use this wisely")
+        await message.channel.send(embed=embed)
+
+    # ── .colour / .color ──────────────────────────────────────────────────────
+    elif content.startswith(".colour") or content.startswith(".color"):
+        parts = content.split()
+        if len(parts) < 2:
+            return await message.channel.send("Usage: `.colour #rrggbb`  e.g. `.colour #ff69b4`")
+        raw = parts[1].lstrip('#')
+        if not re.fullmatch(r'[0-9a-fA-F]{6}', raw):
+            return await message.channel.send("Please give a valid 6-digit hex code, e.g. `#ff69b4`")
+        r, g, b   = int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+        int_color = (r << 16) + (g << 8) + b
+        embed = discord.Embed(title=f"🎨 #{raw.upper()}", color=int_color)
+        embed.add_field(name="Hex", value=f"`#{raw.upper()}`",   inline=True)
+        embed.add_field(name="RGB", value=f"`{r}, {g}, {b}`",    inline=True)
+        embed.add_field(name="Int", value=f"`{int_color}`",       inline=True)
+        embed.set_image(url=f"https://singlecolorimage.com/get/{raw}/400x80")
+        await message.channel.send(embed=embed)
+
+    # ── .reverse ──────────────────────────────────────────────────────────────
+    elif content.startswith(".reverse"):
+        text = content[8:].strip()
+        if not text and message.reference:
+            try:
+                text = (await message.channel.fetch_message(message.reference.message_id)).content
+            except Exception:
+                pass
+        if not text:
+            return await message.channel.send("Usage: `.reverse [text]` or reply to a message.")
+        await message.channel.send(text[::-1])
+
+    # ── .clap ─────────────────────────────────────────────────────────────────
+    elif content.startswith(".clap"):
+        text = content[5:].strip()
+        if not text and message.reference:
+            try:
+                text = (await message.channel.fetch_message(message.reference.message_id)).content
+            except Exception:
+                pass
+        if not text:
+            return await message.channel.send("Usage: `.clap [text]` or reply to a message.")
+        await message.channel.send(' 👏 '.join(text.split()))
+
+    # ── .uwu ──────────────────────────────────────────────────────────────────
+    elif content.startswith(".uwu"):
+        text = content[4:].strip()
+        if not text and message.reference:
+            try:
+                text = (await message.channel.fetch_message(message.reference.message_id)).content
+            except Exception:
+                pass
+        if not text:
+            return await message.channel.send("Usage: `.uwu [text]` or reply to a message.")
+
+        def uwuify(t: str) -> str:
+            for a, b in [('r','w'),('R','W'),('l','w'),('L','W'),
+                         ('na','nya'),('Na','Nya'),('NA','NYA'),
+                         ('no','nyo'),('No','Nyo'),('ne','nye'),
+                         ('Ne','Nye'),('ni','nyi'),('Ni','Nyi'),
+                         ('nu','nyu'),('Nu','Nyu')]:
+                t = t.replace(a, b)
+            return t + random.choice([' OwO',' UwU',' >w<',' :3',' rawr',' nyaa~',' uwu'])
+
+        await message.channel.send(uwuify(text))
+
+    # ── .urban ────────────────────────────────────────────────────────────────
+    elif content.startswith(".urban"):
+        word = content[6:].strip()
+        if not word:
+            return await message.channel.send("Usage: `.urban [word]`")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.urbandictionary.com/v0/define?term={word}") as resp:
+                    if resp.status != 200:
+                        return await message.channel.send("Couldn't reach Urban Dictionary, try again.")
+                    data = await resp.json()
+            if not data.get('list'):
+                return await message.channel.send(f"No results found for **{word}**.")
+            entry      = data['list'][0]
+            definition = entry['definition'].replace('[','').replace(']','')
+            example    = entry['example'].replace('[','').replace(']','')
+            if len(definition) > 900: definition = definition[:900] + '...'
+            if len(example)    > 300: example    = example[:300]    + '...'
+            embed = discord.Embed(
+                title=f"📖 {entry['word']}",
+                url=entry['permalink'],
+                description=definition,
+                color=discord.Color.from_rgb(220, 95, 60),
+            )
+            if example:
+                embed.add_field(name="Example", value=f"*{example}*", inline=False)
+            embed.set_footer(text=f"👍 {entry['thumbs_up']}  👎 {entry['thumbs_down']}  • by {entry['author']}")
+            await message.channel.send(embed=embed)
+        except Exception as e:
+            await message.channel.send(f"Something went wrong: {e}")
+
+    # ── Auto-reactions ────────────────────────────────────────────────────────
+    if message.author.id == TARGET_USER_ID_1:
+        count_1 += 1
+        if count_1 % 3 == 0:
+            await message.add_reaction(REACTION_EMOJI_1)
+    elif message.author.id == TARGET_USER_ID_2:
+        count_2 += 1
+        if count_2 % 10 == 0:
+            await message.add_reaction(REACTION_EMOJI_2)
+
+try:
+    client.run(TOKEN)
+except Exception as e:
+    print(f"Fatal error: {e}")
